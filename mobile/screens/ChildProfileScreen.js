@@ -13,6 +13,7 @@ import {
   Keyboard,
   TouchableWithoutFeedback,
 } from 'react-native';
+import { Picker } from '@react-native-picker/picker'; // add picker
 import * as childService from '../services/childService';
 import Snowflakes from '../components/Snowflakes';
 
@@ -20,6 +21,8 @@ export default function ChildProfileScreen({ route, navigation }) {
   const { childId, onGoBack } = route.params || {};
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
+  const [gender, setGender] = useState('male'); // default
+  const [phoneticSpelling, setPhoneticSpelling] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -29,6 +32,8 @@ export default function ChildProfileScreen({ route, navigation }) {
         .then((data) => {
           setName(data.name || '');
           setAge(data.age?.toString() || '');
+          setGender(data.gender || 'male');
+          setPhoneticSpelling(data.phoneticSpelling || '');
         })
         .catch(() => Alert.alert('Error', 'Failed to load child data'))
         .finally(() => setLoading(false));
@@ -36,16 +41,22 @@ export default function ChildProfileScreen({ route, navigation }) {
   }, [childId]);
 
   const handleSave = async () => {
-    if (!name.trim() || !age.trim()) {
-      Alert.alert('Validation', 'Please fill in all fields');
+    if (!name.trim() || !age.trim() || !gender.trim()) {
+      Alert.alert('Validation', 'Please fill in all required fields');
       return;
     }
     try {
       setLoading(true);
+      const childData = {
+        name,
+        age,
+        gender,
+        phoneticSpelling,
+      };
       if (childId) {
-        await childService.updateChild(childId, { name, age });
+        await childService.updateChild(childId, childData);
       } else {
-        await childService.addChild({ name, age });
+        await childService.addChild(childData);
       }
       if (typeof onGoBack === 'function') onGoBack();
       navigation.goBack();
@@ -92,6 +103,29 @@ export default function ChildProfileScreen({ route, navigation }) {
             keyboardType="numeric"
           />
 
+          {/* Gender Picker */}
+          <View style={styles.pickerContainer}>
+            <Text style={styles.label}>Gender</Text>
+            <Picker
+              selectedValue={gender}
+              style={styles.picker}
+              onValueChange={(itemValue) => setGender(itemValue)}
+            >
+              <Picker.Item label="Male" value="male" />
+              <Picker.Item label="Female" value="female" />
+              <Picker.Item label="Other" value="other" />
+            </Picker>
+          </View>
+
+          {/* Phonetic Spelling */}
+          <TextInput
+            style={styles.input}
+            placeholder="Phonetic Spelling (e.g. Kee-rah for Ciara)"
+            placeholderTextColor="#eee"
+            value={phoneticSpelling}
+            onChangeText={setPhoneticSpelling}
+          />
+
           <TouchableOpacity style={styles.button} onPress={handleSave}>
             <Text style={styles.buttonText}>{childId ? 'Update Child' : 'Add Child'}</Text>
           </TouchableOpacity>
@@ -110,6 +144,20 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 15,
     marginBottom: 15,
+  },
+  pickerContainer: {
+    backgroundColor: '#f44336',
+    borderRadius: 8,
+    marginBottom: 15,
+  },
+  label: {
+    color: '#fff',
+    fontWeight: 'bold',
+    padding: 10,
+  },
+  picker: {
+    color: '#fff',
+    backgroundColor: '#f44336',
   },
   button: {
     backgroundColor: '#4CAF50',
