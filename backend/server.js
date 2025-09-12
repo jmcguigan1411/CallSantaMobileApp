@@ -2,7 +2,9 @@
 const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
+const path = require("path");
 const connectDB = require("./config/db");
+const { errorHandler } = require("./middleware/errorHandler"); // centralized error handling
 
 // Load environment variables
 dotenv.config();
@@ -12,35 +14,50 @@ connectDB();
 
 const app = express();
 
+// Serve static files for Santa audio
+app.use("/tmp", express.static(path.join(__dirname, "tmp")));
+
 // Middleware
 app.use(express.json());
-app.use(cors());
+app.use(cors()); // TODO: restrict origin in production
 
-// Basic route
+// Health check / root route
 app.get("/", (req, res) => {
   res.send("🎅 Santa API is live!");
 });
 
-
+// --- Routes ---
 const authRoutes = require("./routes/authRoutes");
-app.use("/api/auth", authRoutes);
-
 const profileRoutes = require("./routes/profileRoutes");
-app.use("/api/profile", profileRoutes);
-
 const wishlistRoutes = require("./routes/wishlistRoutes");
-app.use("/api/wishlist", wishlistRoutes);
-
 const aiRoutes = require("./routes/aiRoutes");
+const childRoutes = require("./routes/childRoutes");
+console.log("authRoutes:", authRoutes);
+console.log("profileRoutes:", profileRoutes);
+console.log("wishlistRoutes:", wishlistRoutes);
+console.log("aiRoutes:", aiRoutes);
+console.log("childRoutes:", childRoutes);
+
+app.use("/api/auth", authRoutes);
+app.use("/api/profile", profileRoutes);
+app.use("/api/wishlist", wishlistRoutes);
 app.use("/api/ai", aiRoutes);
+app.use("/api/children", childRoutes);
 
-const childRoutes = require('./routes/childRoutes');
-app.use('/api/children', childRoutes);
-
+// Error handler (must come last)
+app.use(errorHandler);
 
 // Start server
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on http://0.0.0.0:${PORT}`);
+const server = app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Server running on http://0.0.0.0:${PORT}`);
 });
 
+// Graceful shutdown
+process.on("SIGINT", async () => {
+  console.log("\n🛑 Shutting down gracefully...");
+  server.close(() => {
+    console.log("✅ HTTP server closed.");
+    process.exit(0);
+  });
+});

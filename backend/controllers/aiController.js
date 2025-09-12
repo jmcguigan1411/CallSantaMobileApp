@@ -1,57 +1,96 @@
 // controllers/aiController.js
 const OpenAI = require("openai");
-const ChildProfile = require("../models/ChildProfile"); // adjust path if needed
+const axios = require("axios");
+const { v4: uuidv4 } = require("uuid");
+const path = require("path");
+const fs = require("fs/promises");
+const fsSync = require("fs");
+const ChildProfile = require("../models/ChildProfile");
+const { getSantaPrompt } = require("../utils/santaPersona");
 
-// Initialize OpenAI client
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// @desc    Chat with Santa
-// @route   POST /api/ai/chat/:childId
-// @access  Private
+// --- helper: save audio buffer and return a static URL ---
+async function saveAudioBuffer(buffer, ext = "mp3") {
+  const filename = `${Date.now()}-${uuidv4()}.${ext}`;
+  const tmpDir = path.join(__dirname, "..", "tmp");
+  if (!fsSync.existsSync(tmpDir)) {
+    fsSync.mkdirSync(tmpDir);
+  }
+  const filePath = path.join(tmpDir, filename);
+  await fs.writeFile(filePath, buffer);
+  return `/tmp/${filename}`; // express.static will serve this
+}
+
+// --- main controller ---
 exports.chatWithSanta = async (req, res) => {
   const { childId } = req.params;
   const { message } = req.body;
 
-  if (!message || message.trim() === "") {
+  if (!message || !message.trim()) {
     return res.status(400).json({ message: "Message is required" });
   }
 
   try {
-    // Find child profile
+    // 1) Find child profile (ensure child belongs to logged-in parent)
     const child = await ChildProfile.findOne({ _id: childId, parent: req.user._id });
-    if (!child) {
-      return res.status(404).json({ message: "Child not found" });
-    }
+    if (!child) return res.status(404).json({ message: "Child not found" });
 
-    // Build prompt
-    const prompt = `You are Santa Claus. A child named ${child.name}, age ${child.age}, is talking to you. Respond warmly and playfully, as Santa would. The child says: "${message}"`;
+    // 2) Build persona prompt
+    const systemPrompt = getSantaPrompt
+      ? getSantaPrompt(child.name, child.age)
+      : `You are Santa Claus. Always be kind, magical, and encouraging.`;
 
-    // Check if we are in development or quota exceeded
-    if (process.env.NODE_ENV === "development" || !process.env.OPENAI_API_KEY) {
-      // Return a mock reply for testing
-      const mockReply = `Ho ho ho! Hello ${child.name}! Santa is excited to hear from you. 🎅✨`;
-      return res.json({ reply: mockReply });
-    }
-
-    // Call OpenAI API
+    // 3) Generate Santa's text reply with OpenAI
     const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo", // widely available
+      model: "gpt-4o-mini",
       messages: [
-        { role: "system", content: "You are Santa Claus. Respond warmly and playfully." },
-        { role: "user", content: prompt },
+        { role: "system", content: systemPrompt },
+        { role: "user", content: message },
       ],
-      max_tokens: 150,
+      max_tokens: 250,
     });
 
-    const santaResponse = completion.choices[0].message.content;
-    res.json({ reply: santaResponse });
+    const santaResponse =
+      completion.choices?.[0]?.message?.content?.trim() ||
+      "Ho ho ho! Merry Christmas! 🎅✨";
 
-  } catch (error) {
-    console.error("OpenAI error:", error.response?.data || error.message);
-    // Fallback to mock reply if API fails
-    const mockReply = `Ho ho ho! Hello ${req.body.name || "child"}! Santa is here but is taking a short break. 🎅✨`;
-    res.json({ reply: mockReply });
+    // 4) Generate Santa's voice with ElevenLabs (optional)
+    let audioUrl = null;
+    const ELEVEN_API_KEY = process.env.ELEVENLABS_API_KEY;
+    const VOICE_ID = process.env.ELEVENLABS_VOICE_ID;
+
+    if (ELEVEN_API_KEY && VOICE_ID) {
+      try {
+        const elevenUrl = `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`;
+        const ttsPayload = {
+          text: santaResponse,
+          voice_settings: { stability: 0.65, similarity_boost: 0.75 },
+        };
+
+        const ttsResp = await axios.post(elevenUrl, ttsPayload, {
+          headers: {
+            "xi-api-key": ELEVEN_API_KEY,
+            "Content-Type": "application/json",
+          },
+          responseType: "arraybuffer",
+        });
+
+        audioUrl = await saveAudioBuffer(Buffer.from(ttsResp.data), "mp3");
+      } catch (ttsErr) {
+        console.error("Santa TTS error:", ttsErr.message || ttsErr);
+      }
+    }
+
+    // 5) Return reply + audioUrl
+    res.json({ reply: santaResponse, audioUrl });
+  } catch (err) {
+    console.error("chatWithSanta error:", err);
+    res.json({
+      reply: `Ho ho ho! Santa is busy feeding the reindeer, but he sends hugs! 🎅🦌✨`,
+      audioUrl: null,
+    });
   }
 };
