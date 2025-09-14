@@ -9,10 +9,7 @@ export const login = async (email, password) => {
       body: JSON.stringify({ email, password }),
     });
 
-    console.log('RAW RESPONSE:', res);
-
     const data = await res.json();
-    console.log('PARSED DATA:', data);
 
     if (!res.ok || !data.token) {
       throw new Error(data.message || 'Login failed, no token returned');
@@ -33,10 +30,7 @@ export const register = async (name, email, password) => {
       body: JSON.stringify({ name, email, password }),
     });
 
-    console.log('RAW RESPONSE:', res);
-
     const data = await res.json();
-    console.log('PARSED DATA:', data);
 
     if (!res.ok || !data.token) {
       throw new Error(data.message || 'Registration failed, no token returned');
@@ -45,6 +39,27 @@ export const register = async (name, email, password) => {
     return data;
   } catch (err) {
     console.error('REGISTER ERROR:', err);
+    throw err;
+  }
+};
+
+export const socialLogin = async (provider, token, name, email) => {
+  try {
+    const res = await fetch(`${API_URL}/social-login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider, token, name, email }),
+    });
+
+    if (!res.ok) {
+      const errData = await res.json();
+      throw new Error(errData.message || 'Social login failed');
+    }
+
+    const data = await res.json();
+    return data;
+  } catch (err) {
+    console.error('SOCIAL LOGIN ERROR:', err);
     throw err;
   }
 };

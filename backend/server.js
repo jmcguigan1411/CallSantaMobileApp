@@ -32,11 +32,7 @@ const profileRoutes = require("./routes/profileRoutes");
 const wishlistRoutes = require("./routes/wishlistRoutes");
 const aiRoutes = require("./routes/aiRoutes");
 const childRoutes = require("./routes/childRoutes");
-console.log("authRoutes:", authRoutes);
-console.log("profileRoutes:", profileRoutes);
-console.log("wishlistRoutes:", wishlistRoutes);
-console.log("aiRoutes:", aiRoutes);
-console.log("childRoutes:", childRoutes);
+
 
 app.use("/api/auth", authRoutes);
 app.use("/api/profile", profileRoutes);

@@ -8,10 +8,10 @@ export const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(false); // for login/register actions
+  const [loading, setLoading] = useState(false); // for all login/register/social actions
   const [loaded, setLoaded] = useState(false);   // true once token check completes
 
-  // Load user token from storage on app start
+  // Load stored token on app start
   useEffect(() => {
     const loadUser = async () => {
       const token = await AsyncStorage.getItem('token');
@@ -23,14 +23,12 @@ export const AuthProvider = ({ children }) => {
     loadUser();
   }, []);
 
+  // 🔹 Email/password login
   const login = async (email, password) => {
     setLoading(true);
     try {
       const data = await authService.login(email, password);
-
-      if (!data || !data.token) {
-        throw new Error('Login failed, no token returned');
-      }
+      if (!data?.token) throw new Error('Login failed, no token returned');
 
       setUser(data);
       await AsyncStorage.setItem('token', data.token);
@@ -44,14 +42,12 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // 🔹 Email/password register
   const register = async (name, email, password) => {
     setLoading(true);
     try {
       const data = await authService.register(name, email, password);
-
-      if (!data || !data.token) {
-        throw new Error('Registration failed, no token returned');
-      }
+      if (!data?.token) throw new Error('Registration failed, no token returned');
 
       setUser(data);
       await AsyncStorage.setItem('token', data.token);
@@ -65,13 +61,43 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // 🔹 Social login (Google / Apple)
+  const socialLogin = async (provider, token) => {
+    setLoading(true);
+    try {
+      const data = await authService.socialLogin(provider, token);
+      if (!data?.token) throw new Error(`${provider} login failed, no token returned`);
+
+      setUser(data);
+      await AsyncStorage.setItem('token', data.token);
+      return data;
+    } catch (error) {
+      console.error('SOCIAL LOGIN ERROR:', error);
+      Alert.alert('Login Error', error.message || `Failed to login with ${provider}`);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 🔹 Logout
   const logout = async () => {
     setUser(null);
     await AsyncStorage.removeItem('token');
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, loaded, login, register, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        loaded,
+        login,
+        register,
+        socialLogin, // ✅ exported for LoginScreen
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

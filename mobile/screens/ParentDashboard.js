@@ -11,6 +11,7 @@ import * as childService from '../services/childService';
 import Snowflakes from '../components/Snowflakes';
 import ChildCard from '../components/ChildCard';
 import AddChildCard from '../components/AddChildCard';
+import ChatWithSantaCard from '../components/ChatWithSantaCard';
 import * as Animatable from 'react-native-animatable';
 
 export default function ParentDashboard({ navigation }) {
@@ -98,7 +99,17 @@ export default function ParentDashboard({ navigation }) {
         keyExtractor={(item) => item._id}
         renderItem={renderChild}
         ListFooterComponent={
-          <AddChildCard onPress={() => handleNavigateToChild()} />
+          <View>
+            <AddChildCard onPress={() => handleNavigateToChild()} />
+            <ChatWithSantaCard
+              disabled={!selectedChildId}
+              onPress={() => {
+                if (!selectedChildId) return;
+                const selectedChild = children.find(c => c._id === selectedChildId);
+                navigation.navigate('SantaChat', { child: selectedChild });
+              }}
+            />
+          </View>
         }
         contentContainerStyle={{ paddingVertical: 10 }}
       />
@@ -113,7 +124,7 @@ export default function ParentDashboard({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#b71c1c',
+    backgroundColor: '#af1f1fff',
   },
   title: {
     fontSize: 28,

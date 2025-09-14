@@ -19,7 +19,7 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: [true, "Please add a password"],
+      // remove 'required' to allow social login users without a password
       minlength: 6,
     },
     role: {
@@ -27,13 +27,18 @@ const userSchema = new mongoose.Schema(
       enum: ["parent", "admin"],
       default: "parent",
     },
+    provider: {
+      type: String,
+      enum: ["local", "google", "apple"],
+      default: "local",
+    },
   },
   { timestamps: true }
 );
 
-// Hash password before saving
+// Hash password before saving, only if password exists
 userSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) {
+  if (!this.isModified("password") || !this.password) {
     return next();
   }
   const salt = await bcrypt.genSalt(10);
@@ -41,8 +46,9 @@ userSchema.pre("save", async function (next) {
   next();
 });
 
-// Compare passwords
+// Compare passwords (will return false if password doesn't exist)
 userSchema.methods.matchPassword = async function (enteredPassword) {
+  if (!this.password) return false;
   return await bcrypt.compare(enteredPassword, this.password);
 };
 

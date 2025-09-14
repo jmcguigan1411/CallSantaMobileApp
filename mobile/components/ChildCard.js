@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 export default function ChildCard({ child, isSelected, onSelect, onEdit, onDelete }) {
   return (
     <LinearGradient
-      colors={['#b71c1c', '#f44336']}
+      colors={['#d46f34ff', '#dd9b8bff']}
       style={[
         styles.card,
         isSelected && { borderWidth: 3, borderColor: '#FFD700' },
