@@ -92,7 +92,6 @@ export default function ParentDashboard({ navigation }) {
   return (
     <View style={styles.container}>
       <Snowflakes />
-      <Text style={styles.title}>Parent Dashboard</Text>
 
       <FlatList
         data={children}

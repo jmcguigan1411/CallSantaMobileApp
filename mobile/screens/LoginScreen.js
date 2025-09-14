@@ -26,15 +26,18 @@ export default function LoginScreen({ navigation }) {
       const { authentication } = response;
       const fetchGoogleUser = async () => {
         try {
-          // Fetch user info from Google
           const res = await fetch('https://www.googleapis.com/userinfo/v2/me', {
             headers: { Authorization: `Bearer ${authentication.accessToken}` },
           });
           const userInfo = await res.json();
 
-          // Use the email from Google response for social login
           await socialLogin('google', authentication.accessToken, userInfo.email);
-          navigation.replace('ParentDashboard');
+
+          // Reset navigation to AppDrawer so burger menu works
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'AppDrawer' }],
+          });
         } catch (err) {
           console.error('Google login error:', err);
         }
@@ -46,7 +49,30 @@ export default function LoginScreen({ navigation }) {
   const handleLogin = async () => {
     const data = await login(email, password);
     if (data) {
-      navigation.replace('ParentDashboard');
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'AppDrawer' }],
+      });
+    }
+  };
+
+  const handleAppleLogin = async () => {
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+
+      await socialLogin('apple', credential.identityToken, credential.email);
+
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'AppDrawer' }],
+      });
+    } catch (e) {
+      if (e.code !== 'ERR_CANCELED') console.error('Apple login error:', e);
     }
   };
 
@@ -58,7 +84,7 @@ export default function LoginScreen({ navigation }) {
           source={{ uri: 'https://www.pngall.com/wp-content/uploads/2016/04/Santa-Hat-Download-PNG.png' }}
           style={styles.santaHat}
         />
-        <Text style={styles.title}>🎅 Santa's Login</Text>
+        <Text style={styles.title}>🎅 Login 🎅</Text>
 
         {/* Email/Password Login */}
         <View style={styles.inputGroup}>
@@ -106,22 +132,7 @@ export default function LoginScreen({ navigation }) {
             buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
             cornerRadius={8}
             style={{ width: '100%', height: 44, marginTop: 10 }}
-            onPress={async () => {
-              try {
-                const credential = await AppleAuthentication.signInAsync({
-                  requestedScopes: [
-                    AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-                    AppleAuthentication.AppleAuthenticationScope.EMAIL,
-                  ],
-                });
-
-                // Pass Apple identity token + email to backend
-                await socialLogin('apple', credential.identityToken, credential.email);
-                navigation.replace('ParentDashboard');
-              } catch (e) {
-                if (e.code !== 'ERR_CANCELED') console.error('Apple login error:', e);
-              }
-            }}
+            onPress={handleAppleLogin}
           />
         )}
 

@@ -86,6 +86,35 @@ export const AuthProvider = ({ children }) => {
     await AsyncStorage.removeItem('token');
   };
 
+  // 🔹 Update Profile (name, email, password)
+  const updateProfile = async ({ name, email, currentPassword, newPassword }) => {
+    setLoading(true);
+    try {
+      const token = user?.token;
+      const res = await fetch('http://localhost:5000/api/auth/update-profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ name, email, currentPassword, newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to update profile');
+
+      // Update context with new user info
+      setUser(prev => ({ ...prev, ...data }));
+      if (data.token) await AsyncStorage.setItem('token', data.token);
+      return data;
+    } catch (err) {
+      console.error('UPDATE PROFILE ERROR:', err);
+      Alert.alert('Error', err.message || 'Failed to update profile');
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -94,8 +123,9 @@ export const AuthProvider = ({ children }) => {
         loaded,
         login,
         register,
-        socialLogin, // ✅ exported for LoginScreen
+        socialLogin,
         logout,
+        updateProfile, // ✅ new
       }}
     >
       {children}
