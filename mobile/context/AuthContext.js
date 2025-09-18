@@ -14,22 +14,29 @@ export const AuthProvider = ({ children }) => {
   // Load stored token on app start
   useEffect(() => {
     const loadUser = async () => {
-      const token = await AsyncStorage.getItem('token');
-      if (token) {
-        setUser({ token });
+      try {
+        const token = await AsyncStorage.getItem('token');
+        console.log('[AuthContext] Loading stored token:', token ? 'Found' : 'Not found');
+        if (token) {
+          setUser({ token });
+        }
+      } catch (error) {
+        console.error('[AuthContext] Error loading token:', error);
+      } finally {
+        setLoaded(true);
       }
-      setLoaded(true);
     };
     loadUser();
   }, []);
 
-  // 🔹 Email/password login
+  // Email/password login
   const login = async (email, password) => {
     setLoading(true);
     try {
       const data = await authService.login(email, password);
       if (!data?.token) throw new Error('Login failed, no token returned');
-
+      
+      console.log('[AuthContext] Login successful, storing token');
       setUser(data);
       await AsyncStorage.setItem('token', data.token);
       return data;
@@ -42,13 +49,14 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // 🔹 Email/password register
+  // Email/password register
   const register = async (name, email, password) => {
     setLoading(true);
     try {
       const data = await authService.register(name, email, password);
       if (!data?.token) throw new Error('Registration failed, no token returned');
-
+      
+      console.log('[AuthContext] Registration successful, storing token');
       setUser(data);
       await AsyncStorage.setItem('token', data.token);
       return data;
@@ -61,13 +69,14 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // 🔹 Social login (Google / Apple)
+  // Social login (Google / Apple)
   const socialLogin = async (provider, token) => {
     setLoading(true);
     try {
       const data = await authService.socialLogin(provider, token);
       if (!data?.token) throw new Error(`${provider} login failed, no token returned`);
-
+      
+      console.log(`[AuthContext] ${provider} login successful, storing token`);
       setUser(data);
       await AsyncStorage.setItem('token', data.token);
       return data;
@@ -80,13 +89,14 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // 🔹 Logout
+  // Logout
   const logout = async () => {
+    console.log('[AuthContext] Logging out, removing token');
     setUser(null);
     await AsyncStorage.removeItem('token');
   };
 
-  // 🔹 Update Profile (name, email, password)
+  // Update Profile (name, email, password)
   const updateProfile = async ({ name, email, currentPassword, newPassword }) => {
     setLoading(true);
     try {
@@ -101,10 +111,13 @@ export const AuthProvider = ({ children }) => {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to update profile');
-
+      
       // Update context with new user info
       setUser(prev => ({ ...prev, ...data }));
-      if (data.token) await AsyncStorage.setItem('token', data.token);
+      if (data.token) {
+        console.log('[AuthContext] Profile updated, storing new token');
+        await AsyncStorage.setItem('token', data.token);
+      }
       return data;
     } catch (err) {
       console.error('UPDATE PROFILE ERROR:', err);
@@ -115,17 +128,26 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Debug logging for token access
+  const token = user?.token;
+  console.log('[AuthContext] Current state:', {
+    hasUser: !!user,
+    hasToken: !!token,
+    loaded
+  });
+
   return (
     <AuthContext.Provider
       value={{
         user,
+        token: user?.token, // Expose token directly for easy access
         loading,
         loaded,
         login,
         register,
         socialLogin,
         logout,
-        updateProfile, // ✅ new
+        updateProfile,
       }}
     >
       {children}

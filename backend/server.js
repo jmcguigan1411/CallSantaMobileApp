@@ -1,8 +1,17 @@
 // server.js
+const path = require("path");
+const fs = require("fs");
+
+// Ensure tmp directory exists for audio files
+const tmpDir = path.join(__dirname, "tmp");
+if (!fs.existsSync(tmpDir)) {
+  fs.mkdirSync(tmpDir, { recursive: true });
+  console.log("📁 Created tmp directory for audio files");
+}
 const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
-const path = require("path");
+
 const connectDB = require("./config/db");
 const { errorHandler } = require("./middleware/errorHandler"); // centralized error handling
 
