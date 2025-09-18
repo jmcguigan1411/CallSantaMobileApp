@@ -17,13 +17,6 @@ export default function SantaCallScreen({ route, navigation }) {
   const child = route?.params?.child;
   const { token } = useContext(AuthContext);
 
-  // ADD TOKEN DEBUG LOGGING
-  console.log('[Santa Call] Auth Context Debug:', {
-    hasToken: !!token,
-    tokenLength: token?.length,
-    tokenPreview: token ? token.substring(0, 20) + '...' : 'NO_TOKEN'
-  });
-
   const [callStatus, setCallStatus] = useState('Calling...');
   const [callDuration, setCallDuration] = useState(0);
   const [santaSpeaking, setSantaSpeaking] = useState(false);
@@ -71,23 +64,19 @@ export default function SantaCallScreen({ route, navigation }) {
     if (__DEV__) {
       const timestamp = new Date().toLocaleTimeString();
       console.log(msg);
-      setDevLogs((prev) => [...prev.slice(-15), `[${timestamp}] ${msg}`]);
+      setDevLogs((prev) => [...prev.slice(-20), `[${timestamp}] ${msg}`]);
     }
   };
 
   // --- Initialize call sequence ---
   useEffect(() => {
-    // Log token availability when component mounts
-    addLog(`🔑 Token check: ${token ? 'Available' : 'MISSING'}`);
-    if (!token) {
-      addLog('❌ NO TOKEN - User may need to log in again');
-    }
-
+    addLog('🚀 Component mounted, initializing call in 3 seconds...');
     const ringTimeout = setTimeout(async () => {
       await initializeCall();
     }, 3000);
 
     return () => {
+      addLog('🔄 Component unmounting, cleaning up...');
       clearTimeout(ringTimeout);
       cleanup();
     };
@@ -96,10 +85,13 @@ export default function SantaCallScreen({ route, navigation }) {
   // --- Initialize call ---
   const initializeCall = async () => {
     try {
-      setCallStatus('In Call');
+      addLog('📱 Starting call initialization...');
       addLog('📞 Call connected!');
+      setCallStatus('In Call');
+      addLog('✅ Call status set to: In Call');
 
       // Check and request permissions
+      addLog('🔐 Requesting microphone permissions...');
       const permissionResponse = await Audio.requestPermissionsAsync();
       if (permissionResponse.status !== 'granted') {
         addLog('❌ Microphone permission denied');
@@ -110,6 +102,7 @@ export default function SantaCallScreen({ route, navigation }) {
       addLog('✅ Microphone permission granted');
 
       // Setup audio mode
+      addLog('🔧 Configuring audio mode...');
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
@@ -118,12 +111,14 @@ export default function SantaCallScreen({ route, navigation }) {
         staysActiveInBackground: false,
       });
 
-      addLog('🎵 Audio mode configured');
+      addLog('🎵 Audio mode configured successfully');
 
       // Start call timer
+      addLog('⏰ Starting call timer...');
       timerId.current = setInterval(() => setCallDuration((prev) => prev + 1), 1000);
 
       // Play Santa greeting first
+      addLog('🎅 Preparing to play Santa greeting...');
       await santaGreeting();
     } catch (error) {
       console.error('Initialize call error:', error);
@@ -135,6 +130,7 @@ export default function SantaCallScreen({ route, navigation }) {
   // --- Santa greeting with phonetic name ---
   const santaGreeting = async () => {
     try {
+      addLog('🎭 Setting Santa speaking state...');
       setSantaSpeaking(true);
       addLog('🎅 Preparing Santa greeting...');
       
@@ -167,12 +163,14 @@ export default function SantaCallScreen({ route, navigation }) {
       addLog(`🗣️ Using phonetic: "${spokenName}"`);
       
       const greeting = `Ho ho ho! Hello ${spokenName}! This is Santa calling from the North Pole. What would you like for Christmas this year?`;
+      addLog(`📜 Greeting text: "${greeting}"`);
       
+      addLog('🌐 Sending greeting request to server...');
       // Send greeting with validated child ID and token
       const response = await chatWithSantaAudio(
         childId,
         null,
-        token, // Pass the token
+        token,
         { 
           isGreeting: true, 
           greetingText: greeting,
@@ -180,11 +178,13 @@ export default function SantaCallScreen({ route, navigation }) {
         }
       );
 
+      addLog('📨 Server response received for greeting');
       if (response?.audioBase64) {
-        addLog('🔊 Playing Santa greeting...');
+        addLog('🔊 Audio data received, preparing to play...');
         await playAudioFromBase64(response.audioBase64);
       } else {
-        addLog('❌ No greeting audio received');
+        addLog('❌ No greeting audio received from server');
+        addLog('🔧 Will start listening without greeting...');
         setTimeout(() => startListening(), 2000);
       }
 
@@ -198,6 +198,7 @@ export default function SantaCallScreen({ route, navigation }) {
         alert('Session expired. Please log out and log back in.');
       }
       
+      addLog('⏳ Will start listening after 3 second delay...');
       setTimeout(() => startListening(), 3000);
     }
   };
@@ -205,37 +206,62 @@ export default function SantaCallScreen({ route, navigation }) {
   // --- Start continuous recording with voice activity detection ---
   const startListening = async () => {
     try {
-      // Double-check permissions before starting
-      const { status } = await Audio.getPermissionsAsync();
-      if (status !== 'granted') {
-        addLog('❌ No microphone permission');
+      addLog('🎤 === STARTING LISTENING PHASE ===');
+      addLog(`🔍 Current states: listening=${listening}, santaSpeaking=${santaSpeaking}, callStatus="${callStatus}"`);
+      
+      // Wait for Santa to completely finish speaking before starting to listen
+      if (santaSpeaking) {
+        addLog('⏸️ Santa is still speaking, waiting 1 second before starting to listen...');
+        setTimeout(() => startListening(), 1000);
         return;
       }
+      
+      // Double-check permissions before starting
+      addLog('🔐 Double-checking microphone permissions...');
+      const { status } = await Audio.getPermissionsAsync();
+      if (status !== 'granted') {
+        addLog('❌ No microphone permission available');
+        return;
+      }
+      addLog('✅ Microphone permission confirmed');
 
+      addLog('🎭 Setting listening state to true...');
       setListening(true);
-      setSantaSpeaking(false);
-      addLog('🎤 Starting to listen...');
+      // DON'T set santaSpeaking to false here - let the audio playback manage it
+      
+      // Wait for state to update before proceeding
+      await new Promise(resolve => setTimeout(resolve, 100));
+      addLog(`🔍 States after setting and waiting: listening should be true`);
+      addLog('🎤 Starting to listen for user voice...');
 
       // Create recording with optimized settings
+      addLog('🔧 Creating recording instance with optimized settings...');
       const { recording } = await Audio.Recording.createAsync(recordingOptions);
       recordingRef.current = recording;
       recordingStartTime.current = Date.now();
       voiceActivityRef.current = false;
 
-      addLog('📊 Recording started successfully');
+      addLog('📊 Recording instance created successfully');
+      addLog(`⚙️ Recording settings: ${JSON.stringify(recordingOptions)}`);
 
       // Enable metering for voice activity detection
+      addLog('▶️ Starting recording...');
       await recording.startAsync();
+      addLog('🟢 Recording started successfully');
       
-      // Start voice activity detection
+      // Start voice activity detection immediately since we just set the states
+      addLog('👂 Starting voice activity detection...');
+      // Don't check the listening state here since we just set it - start immediately
       startVoiceActivityDetection();
       
     } catch (error) {
       console.error('Start listening error:', error);
       addLog(`❌ Listen error: ${error.message}`);
+      addLog('🔄 Setting listening state to false due to error');
       setListening(false);
       
       // Retry after delay
+      addLog('⏳ Scheduling retry in 2 seconds...');
       setTimeout(() => {
         addLog('🔄 Retrying to start listening...');
         startListening();
@@ -245,11 +271,29 @@ export default function SantaCallScreen({ route, navigation }) {
 
   // --- Voice activity detection with metering ---
   const startVoiceActivityDetection = () => {
+    addLog('🔍 === VOICE ACTIVITY DETECTION STARTED ===');
+    addLog(`⚙️ Detection settings: Threshold=${VOICE_THRESHOLD}dB, Silence=${SILENCE_DURATION}ms, MinTime=${MIN_RECORDING_TIME}ms`);
+    
     let lastVoiceTime = Date.now();
     let hasDetectedVoice = false;
+    let meteringCount = 0;
+    let isActive = true; // Use local flag instead of relying on React state
 
     meteringRef.current = setInterval(async () => {
-      if (!recordingRef.current || !listening) {
+      meteringCount++;
+      
+      // Check local flag instead of React state
+      if (!isActive) {
+        addLog('⚠️ Metering stopped - detection marked as inactive');
+        clearInterval(meteringRef.current);
+        return;
+      }
+      
+      // Debug state checking
+      if (!recordingRef.current) {
+        addLog('⚠️ Metering stopped - no recording reference');
+        isActive = false;
+        clearInterval(meteringRef.current);
         return;
       }
 
@@ -259,15 +303,26 @@ export default function SantaCallScreen({ route, navigation }) {
         
         if (status.isRecording) {
           const currentTime = Date.now();
+          const totalDuration = currentTime - recordingStartTime.current;
+          
+          // Log every 20 metering checks (4 seconds)
+          if (meteringCount % 20 === 0) {
+            addLog(`📊 Metering check #${meteringCount} - Total duration: ${Math.round(totalDuration/1000)}s`);
+          }
           
           // Check if we have metering data
           if (status.metering !== undefined) {
             const audioLevel = status.metering;
             
+            // Log audio levels occasionally
+            if (meteringCount % 25 === 0) {
+              addLog(`🔊 Audio level: ${audioLevel}dB (threshold: ${VOICE_THRESHOLD}dB)`);
+            }
+            
             // Voice detected if audio level is above threshold
             if (audioLevel > VOICE_THRESHOLD) {
               if (!hasDetectedVoice) {
-                addLog('🗣️ Voice detected!');
+                addLog('🗣️ VOICE DETECTED! User started speaking');
                 hasDetectedVoice = true;
               }
               lastVoiceTime = currentTime;
@@ -275,8 +330,9 @@ export default function SantaCallScreen({ route, navigation }) {
             }
           } else {
             // Fallback: assume voice activity if recording is working
-            if (!hasDetectedVoice && currentTime - recordingStartTime.current > 1000) {
-              addLog('🔊 Audio recording active (no metering)');
+            if (!hasDetectedVoice && totalDuration > 1000) {
+              addLog('🔊 Audio recording active (no metering data available)');
+              addLog('📝 Assuming voice activity due to recording duration');
               hasDetectedVoice = true;
               lastVoiceTime = currentTime;
               voiceActivityRef.current = true;
@@ -285,26 +341,34 @@ export default function SantaCallScreen({ route, navigation }) {
 
           // Check for silence after voice was detected
           const silenceDuration = currentTime - lastVoiceTime;
-          const totalDuration = currentTime - recordingStartTime.current;
 
           if (hasDetectedVoice && silenceDuration >= SILENCE_DURATION && totalDuration >= MIN_RECORDING_TIME) {
-            addLog(`🔇 Silence detected (${Math.round(silenceDuration/1000)}s)`);
+            addLog(`🔇 SILENCE DETECTED! (${Math.round(silenceDuration/1000)}s of silence)`);
+            addLog(`📊 Recording stats: Total=${Math.round(totalDuration/1000)}s, Silence=${Math.round(silenceDuration/1000)}s`);
+            addLog('🛑 Stopping voice detection timer...');
             clearInterval(meteringRef.current);
+            addLog('📦 Proceeding to process user speech...');
             await processUserSpeech();
+            return;
           }
 
           // Timeout after 30 seconds of no processing
           if (totalDuration > 30000) {
-            addLog('⏰ Recording timeout (30s)');
+            addLog('⏰ RECORDING TIMEOUT (30s reached)');
             if (hasDetectedVoice) {
+              addLog('✅ Voice was detected, processing speech...');
               clearInterval(meteringRef.current);
               await processUserSpeech();
             } else {
+              addLog('❌ No voice detected during timeout, restarting...');
               clearInterval(meteringRef.current);
               await stopListening();
+              addLog('⏳ Restarting listening in 1 second...');
               setTimeout(() => startListening(), 1000);
             }
           }
+        } else {
+          addLog('⚠️ Recording is not active during metering check');
         }
       } catch (error) {
         console.error('Metering error:', error);
@@ -312,95 +376,125 @@ export default function SantaCallScreen({ route, navigation }) {
       }
     }, METERING_INTERVAL);
 
-    addLog(`⏱️ Voice detection started (${SILENCE_DURATION/1000}s silence threshold)`);
+    addLog(`⏱️ Voice detection timer started (checking every ${METERING_INTERVAL}ms)`);
+    addLog(`🤫 Waiting for ${SILENCE_DURATION/1000}s silence to process speech...`);
   };
 
   // --- Stop listening ---
   const stopListening = async () => {
+    addLog('🛑 === STOPPING LISTENING ===');
+    addLog('🎭 Setting listening state to false...');
     setListening(false);
     
     if (meteringRef.current) {
+      addLog('⏹️ Clearing voice detection timer...');
       clearInterval(meteringRef.current);
       meteringRef.current = null;
     }
 
     if (recordingRef.current) {
       try {
+        addLog('📊 Checking recording status before stopping...');
         const status = await recordingRef.current.getStatusAsync();
         if (status.isRecording) {
+          addLog('🛑 Stopping and unloading recording...');
           await recordingRef.current.stopAndUnloadAsync();
+          addLog('✅ Recording stopped successfully');
+        } else {
+          addLog('ℹ️ Recording was already stopped');
         }
       } catch (error) {
         console.error('Stop recording error:', error);
+        addLog(`❌ Error stopping recording: ${error.message}`);
       }
+      recordingRef.current = null; // Clear the reference
     }
+    addLog('✅ Stop listening completed');
   };
 
   // --- Process user speech ---
   const processUserSpeech = async () => {
-    if (!recordingRef.current) return;
+    addLog('🧠 === PROCESSING USER SPEECH ===');
+    
+    if (!recordingRef.current) {
+      addLog('❌ No recording reference available');
+      return;
+    }
 
     try {
-      await stopListening();
-      addLog('📦 Processing user speech...');
-
-      // Check token before processing
-      if (!token) {
-        addLog('❌ No token available for processing speech');
-        throw new Error('Authentication token missing');
-      }
-
-      // Stop and get recording
-      const status = await recordingRef.current.getStatusAsync();
-      if (status.isRecording) {
-        await recordingRef.current.stopAndUnloadAsync();
-      }
-      
+      // Get the audio URI BEFORE stopping the recording
+      addLog('📁 Retrieving audio URI before stopping...');
       const audioUri = recordingRef.current.getURI();
-      recordingRef.current = null;
+      
+      addLog('🛑 Stopping listening before processing...');
+      await stopListening();
+      addLog('📦 Starting speech processing pipeline...');
 
       if (!audioUri) {
-        addLog('❌ No audio URI generated');
+        addLog('❌ No audio URI generated from recording');
+        addLog('⏳ Will restart listening in 2 seconds...');
         setTimeout(() => startListening(), 2000);
         return;
       }
 
+      addLog(`📍 Audio URI obtained: ${audioUri}`);
+
       // Verify file exists and has content
+      addLog('🔍 Verifying audio file...');
       const fileInfo = await FileSystem.getInfoAsync(audioUri);
+      addLog(`📊 File info: exists=${fileInfo.exists}, size=${fileInfo.size} bytes`);
+      
       if (!fileInfo.exists || fileInfo.size < 1000) {
         addLog(`❌ Audio file too small or missing (${fileInfo.size} bytes)`);
+        addLog('⏳ Will restart listening in 2 seconds...');
         setTimeout(() => startListening(), 2000);
         return;
       }
 
       const recordingDuration = Date.now() - recordingStartTime.current;
-      addLog(`📁 Audio file ready (${Math.round(recordingDuration/1000)}s, ${Math.round(fileInfo.size/1024)}KB)`);
-      addLog('🤖 Sending to ChatGPT...');
+      addLog(`✅ Audio file validated: ${Math.round(recordingDuration/1000)}s duration, ${Math.round(fileInfo.size/1024)}KB`);
+      
+      // Check token before processing
+      if (!token) {
+        addLog('❌ No authentication token available for processing');
+        throw new Error('Authentication token missing');
+      }
+
+      addLog('🤖 Sending audio to backend pipeline...');
+      addLog('📡 Pipeline: Audio → Whisper (speech-to-text) → ChatGPT → ElevenLabs → Response');
 
       // Send to backend: audio -> Whisper -> ChatGPT -> ElevenLabs
       const response = await chatWithSantaAudio(child?._id, audioUri, token);
       
+      addLog('📨 Backend response received');
+      
       if (response?.text) {
-        addLog(`💭 ChatGPT: "${response.text.substring(0, 50)}${response.text.length > 50 ? '...' : ''}"`);
+        const previewText = response.text.substring(0, 100);
+        addLog(`💭 Santa's response: "${previewText}${response.text.length > 100 ? '...' : ''}"`);
+      } else {
+        addLog('❌ No text response from backend');
       }
       
       if (response?.audioBase64) {
-        addLog('🎵 ElevenLabs audio received');
+        addLog(`🎵 Audio response received (${response.audioBase64.length} characters)`);
+        addLog('▶️ Starting audio playback...');
         await playAudioFromBase64(response.audioBase64);
       } else {
-        addLog('❌ No audio response received');
+        addLog('❌ No audio response received from backend');
+        addLog('⏳ Will restart listening in 2 seconds...');
         setTimeout(() => startListening(), 2000);
       }
 
     } catch (error) {
       console.error('Process speech error:', error);
-      addLog(`❌ Process error: ${error.message}`);
+      addLog(`❌ Speech processing error: ${error.message}`);
       
       // Handle auth errors specifically
       if (error.message.includes('token') || error.message.includes('401')) {
-        addLog('🔐 Token issue during speech processing');
+        addLog('🔐 Authentication error during speech processing');
       }
       
+      addLog('⏳ Will restart listening in 3 seconds...');
       setTimeout(() => startListening(), 3000);
     }
   };
@@ -408,47 +502,66 @@ export default function SantaCallScreen({ route, navigation }) {
   // --- Play audio from base64 ---
   const playAudioFromBase64 = async (audioBase64) => {
     try {
+      addLog('🔊 === PLAYING SANTA AUDIO ===');
+      addLog('🎭 Setting Santa speaking state...');
       setSantaSpeaking(true);
-      addLog('▶️ Playing Santa response...');
+      addLog('▶️ Preparing audio playback...');
       
       // Create temporary file for better compatibility
       const tempUri = `${FileSystem.documentDirectory}temp_santa_audio.mp3`;
+      addLog(`📁 Creating temporary audio file: ${tempUri}`);
+      
       await FileSystem.writeAsStringAsync(tempUri, audioBase64, {
         encoding: FileSystem.EncodingType.Base64,
       });
+      addLog('✅ Temporary audio file created');
       
+      addLog('🔧 Creating audio sound instance...');
       const { sound } = await Audio.Sound.createAsync(
         { uri: tempUri },
         { shouldPlay: true, volume: 1.0 }
       );
       
       soundRef.current = sound;
+      addLog('🔊 Audio playback started');
 
       sound.setOnPlaybackStatusUpdate(async (status) => {
         if (status.didJustFinish) {
           addLog('✅ Santa finished speaking');
+          addLog('🎭 Resetting speaking state...');
           setSantaSpeaking(false);
           
           try {
+            addLog('🧹 Cleaning up audio resources...');
             await sound.unloadAsync();
             await FileSystem.deleteAsync(tempUri, { idempotent: true });
+            addLog('✅ Audio cleanup completed');
           } catch (cleanupError) {
             console.error('Audio cleanup error:', cleanupError);
+            addLog(`⚠️ Audio cleanup error: ${cleanupError.message}`);
           }
           
           soundRef.current = null;
           
           // After Santa finishes, start listening again
+          addLog('⏳ Scheduling next listening session in 2 seconds... (increased delay)');
+          addLog(`🔍 DEBUG: Current call status: "${callStatus}"`);
           setTimeout(() => {
-            if (callStatus === 'In Call') {
+            // Always restart listening unless call was explicitly ended
+            addLog(`🔍 DEBUG: Call status check: "${callStatus}" !== "Call Ended"?`);
+            if (callStatus !== 'Call Ended') {
+              addLog('🔄 Restarting listening for next user input...');
               startListening();
+            } else {
+              addLog('ℹ️ Call was ended, not restarting listening');
             }
-          }, 800);
+          }, 2000); // Increased from 800ms to 2000ms
         }
 
         if (status.error) {
           addLog(`❌ Audio playback error: ${status.error}`);
           setSantaSpeaking(false);
+          addLog('⏳ Will restart listening in 1 second due to playback error...');
           setTimeout(() => startListening(), 1000);
         }
       });
@@ -457,32 +570,39 @@ export default function SantaCallScreen({ route, navigation }) {
       console.error('Play audio error:', error);
       addLog(`❌ Audio playback error: ${error.message}`);
       setSantaSpeaking(false);
+      addLog('⏳ Will restart listening in 2 seconds due to playback setup error...');
       setTimeout(() => startListening(), 2000);
     }
   };
 
   // --- Cleanup function ---
   const cleanup = async () => {
-    addLog('🧹 Cleaning up...');
+    addLog('🧹 === CLEANING UP RESOURCES ===');
     
     if (timerId.current) {
+      addLog('⏰ Clearing call timer...');
       clearInterval(timerId.current);
       timerId.current = null;
     }
 
     if (meteringRef.current) {
+      addLog('⏹️ Clearing voice detection timer...');
       clearInterval(meteringRef.current);
       meteringRef.current = null;
     }
 
+    addLog('🛑 Stopping listening...');
     await stopListening();
 
     if (soundRef.current) {
       try {
+        addLog('🔊 Stopping and unloading audio...');
         await soundRef.current.stopAsync();
         await soundRef.current.unloadAsync();
+        addLog('✅ Audio cleanup completed');
       } catch (error) {
         console.error('Cleanup sound error:', error);
+        addLog(`⚠️ Audio cleanup error: ${error.message}`);
       }
       soundRef.current = null;
     }
@@ -490,19 +610,25 @@ export default function SantaCallScreen({ route, navigation }) {
     // Clean up temp files
     try {
       const tempUri = `${FileSystem.documentDirectory}temp_santa_audio.mp3`;
+      addLog('🗑️ Removing temporary audio file...');
       await FileSystem.deleteAsync(tempUri, { idempotent: true });
+      addLog('✅ Temporary file cleanup completed');
     } catch (error) {
-      // Ignore cleanup errors
+      addLog('ℹ️ Temporary file cleanup skipped (file may not exist)');
     }
+    
+    addLog('✅ === CLEANUP COMPLETED ===');
   };
 
   // --- End call ---
   const endCall = async () => {
+    addLog('📞 === ENDING CALL ===');
     setCallStatus('Call Ended');
     addLog('📞 Call ended by user');
     
     await cleanup();
     
+    addLog('⏳ Navigating back in 2 seconds...');
     setTimeout(() => navigation.goBack(), 2000);
   };
 
@@ -688,38 +814,5 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
     shadowRadius: 8,
-  },
-  endButton: {
-    backgroundColor: '#d32f2f',
-  },
-  endButtonText: {
-    fontSize: 32,
-  },
-  devPanel: {
-    position: 'absolute',
-    bottom: 150,
-    left: 16,
-    right: 16,
-    maxHeight: 220,
-    backgroundColor: 'rgba(0, 0, 0, 0.95)',
-    borderRadius: 15,
-    padding: 15,
-    borderWidth: 1,
-    borderColor: '#444',
-  },
-  devTitle: {
-    color: '#44ff44',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
-  devScrollView: {
-    maxHeight: 180,
-  },
-  devLog: {
-    color: '#00ff88',
-    fontSize: 12,
-    marginBottom: 3,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
 });
