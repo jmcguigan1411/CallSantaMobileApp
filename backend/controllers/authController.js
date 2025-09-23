@@ -15,13 +15,11 @@ const generateToken = (id) => {
 // @access  Public
 exports.registerParent = async (req, res) => {
   const { name, email, password } = req.body;
-
   try {
     const userExists = await User.findOne({ email });
     if (userExists) {
       return res.status(400).json({ message: "Email already registered" });
     }
-
     const user = await User.create({
       name,
       email,
@@ -29,11 +27,11 @@ exports.registerParent = async (req, res) => {
       role: "parent",
       provider: "local",
     });
-
     res.status(201).json({
       _id: user._id,
       name: user.name,
       email: user.email,
+      hasAcceptedTerms: user.hasAcceptedTerms,
       token: generateToken(user._id),
     });
   } catch (error) {
@@ -46,7 +44,6 @@ exports.registerParent = async (req, res) => {
 // @access  Public
 exports.loginParent = async (req, res) => {
   const { email, password } = req.body;
-
   try {
     const user = await User.findOne({ email });
     if (user && (await user.matchPassword(password))) {
@@ -54,6 +51,7 @@ exports.loginParent = async (req, res) => {
         _id: user._id,
         name: user.name,
         email: user.email,
+        hasAcceptedTerms: user.hasAcceptedTerms,
         token: generateToken(user._id),
       });
     } else {
@@ -70,14 +68,11 @@ exports.loginParent = async (req, res) => {
 exports.socialLogin = async (req, res) => {
   try {
     const { provider, token } = req.body;
-
     if (!provider || !token) {
       return res.status(400).json({ message: "Provider and token are required" });
     }
-
     let email;
     let name;
-
     if (provider === "google") {
       // Verify Google token
       const ticket = await googleClient.verifyIdToken({
@@ -101,10 +96,8 @@ exports.socialLogin = async (req, res) => {
     } else {
       return res.status(400).json({ message: "Unsupported provider" });
     }
-
     // Find existing user
     let user = await User.findOne({ email });
-
     // If user doesn't exist, create new social account
     if (!user) {
       user = new User({
@@ -120,14 +113,13 @@ exports.socialLogin = async (req, res) => {
       // or link accounts here if you want
       console.warn(`User ${email} exists with different provider: ${user.provider}`);
     }
-
     // Generate JWT for the app
     const appToken = generateToken(user._id);
-
     res.json({
       _id: user._id,
       name: user.name,
       email: user.email,
+      hasAcceptedTerms: user.hasAcceptedTerms,
       token: appToken,
     });
   } catch (err) {
@@ -136,3 +128,24 @@ exports.socialLogin = async (req, res) => {
   }
 };
 
+// @desc    Accept terms and conditions
+// @route   POST /api/auth/accept-terms
+// @access  Private
+exports.acceptTerms = async (req, res) => {
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      { 
+        hasAcceptedTerms: true, 
+        termsAcceptedAt: new Date() 
+      },
+      { new: true }
+    );
+    res.json({ 
+      success: true, 
+      hasAcceptedTerms: user.hasAcceptedTerms 
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};

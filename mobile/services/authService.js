@@ -8,13 +8,10 @@ export const login = async (email, password) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     });
-
     const data = await res.json();
-
     if (!res.ok || !data.token) {
       throw new Error(data.message || 'Login failed, no token returned');
     }
-
     return data;
   } catch (err) {
     console.error('LOGIN ERROR:', err);
@@ -29,13 +26,10 @@ export const register = async (name, email, password) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, email, password }),
     });
-
     const data = await res.json();
-
     if (!res.ok || !data.token) {
       throw new Error(data.message || 'Registration failed, no token returned');
     }
-
     return data;
   } catch (err) {
     console.error('REGISTER ERROR:', err);
@@ -50,16 +44,34 @@ export const socialLogin = async (provider, token, name, email) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ provider, token, name, email }),
     });
-
     if (!res.ok) {
       const errData = await res.json();
       throw new Error(errData.message || 'Social login failed');
     }
-
     const data = await res.json();
     return data;
   } catch (err) {
     console.error('SOCIAL LOGIN ERROR:', err);
+    throw err;
+  }
+};
+
+export const acceptTerms = async (token) => {
+  try {
+    const res = await fetch(`${API_URL}/accept-terms`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.message || 'Failed to accept terms');
+    }
+    return data;
+  } catch (err) {
+    console.error('ACCEPT TERMS ERROR:', err);
     throw err;
   }
 };

@@ -1,4 +1,3 @@
-// controllers/aiController.js
 const OpenAI = require("openai");
 const axios = require("axios");
 const { v4: uuidv4 } = require("uuid");
@@ -24,7 +23,7 @@ async function saveAudioBuffer(buffer, ext = "mp3") {
   return `/tmp/${filename}`; // express.static will serve this
 }
 
-// --- Generate Santa's voice with ElevenLabs ---
+// --- Generate Santa's voice with ElevenLabs (OPTIMIZED) ---
 async function generateSantaVoice(text) {
   const ELEVEN_API_KEY = process.env.ELEVENLABS_API_KEY;
   const VOICE_ID = process.env.ELEVENLABS_VOICE_ID;
@@ -38,11 +37,12 @@ async function generateSantaVoice(text) {
     const elevenUrl = `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`;
     const ttsPayload = {
       text: text,
+      model_id: "eleven_turbo_v2", // Faster model
       voice_settings: { 
-        stability: 0.65, 
-        similarity_boost: 0.75,
-        style: 0.1,
-        use_speaker_boost: true
+        stability: 0.5,              // Reduced from 0.65 for speed
+        similarity_boost: 0.7,       // Reduced from 0.75 for speed
+        style: 0.0,                  // Reduced from 0.1 for speed
+        use_speaker_boost: false     // Disabled for speed
       },
     };
 
@@ -54,6 +54,7 @@ async function generateSantaVoice(text) {
         "Content-Type": "application/json",
       },
       responseType: "arraybuffer",
+      timeout: 8000, // Reduced timeout from 30s to 8s
     });
 
     // Convert to base64 for mobile app
@@ -69,7 +70,7 @@ async function generateSantaVoice(text) {
   }
 }
 
-// --- Transcribe audio using Whisper ---
+// --- Transcribe audio using Whisper (OPTIMIZED) ---
 async function transcribeAudio(filePath) {
   try {
     console.log(`Transcribing audio file: ${filePath}`);
@@ -78,14 +79,35 @@ async function transcribeAudio(filePath) {
       file: fsSync.createReadStream(filePath),
       model: "whisper-1",
       language: "en",
+      response_format: "text", // Faster than JSON format
     });
 
-    console.log(`Transcription result: "${transcription.text}"`);
-    return transcription.text;
+    console.log(`Transcription result: "${transcription}"`);
+    return transcription;
   } catch (error) {
     console.error("Whisper transcription error:", error);
     throw new Error("Failed to transcribe audio");
   }
+}
+
+// --- Generate ChatGPT response (OPTIMIZED) ---
+async function generateSantaResponse(userMessage, child) {
+  const systemPrompt = getSantaPrompt
+    ? getSantaPrompt(child.name, child.age)
+    : `You are Santa Claus talking to ${child.name}, who is ${child.age} years old. Be warm, magical, encouraging, and keep responses conversational and under 100 words. Ask follow-up questions to keep the conversation going.`;
+
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userMessage },
+    ],
+    max_tokens: 150,        // Reduced from 200
+    temperature: 0.8,
+  });
+
+  return completion.choices?.[0]?.message?.content?.trim() || 
+         "Ho ho ho! That's wonderful! Tell me more!";
 }
 
 // --- Existing text chat controller ---
@@ -143,7 +165,7 @@ exports.chatWithSanta = async (req, res) => {
   }
 };
 
-// --- NEW: Audio chat controller for phone calls ---
+// --- NEW: Audio chat controller for phone calls (OPTIMIZED) ---
 exports.chatWithSantaAudio = async (req, res) => {
   const { childId } = req.params;
   const { isGreeting, greetingText, childName } = req.body;
@@ -174,42 +196,40 @@ exports.chatWithSantaAudio = async (req, res) => {
 
       console.log(`Processing audio file: ${audioFile.filename} (${audioFile.size} bytes)`);
 
-      // 2) Transcribe audio using Whisper
-      const userMessage = await transcribeAudio(audioFile.path);
-      
-      if (!userMessage.trim()) {
-        // Clean up file and return gentle prompt
+      // 2) Process in parallel where possible
+      try {
+        // Transcribe audio using Whisper
+        const userMessage = await transcribeAudio(audioFile.path);
+        
+        if (!userMessage.trim()) {
+          // Clean up file and return gentle prompt
+          await fs.unlink(audioFile.path).catch(console.error);
+          const audioBase64 = await generateSantaVoice("Ho ho ho! I didn't quite catch that. Can you tell me again what you'd like for Christmas?");
+          return res.json({
+            text: "I didn't quite catch that. Can you tell me again?",
+            audioBase64
+          });
+        }
+
+        // Generate ChatGPT response
+        santaResponse = await generateSantaResponse(userMessage, child);
+
+        console.log(`User said: "${userMessage}"`);
+        console.log(`Santa responds: "${santaResponse}"`);
+
+        // Clean up uploaded audio file
         await fs.unlink(audioFile.path).catch(console.error);
-        const audioBase64 = await generateSantaVoice("Ho ho ho! I didn't quite catch that. Can you tell me again what you'd like for Christmas?");
+      } catch (transcriptionError) {
+        console.error("Audio processing error:", transcriptionError);
+        await fs.unlink(audioFile.path).catch(console.error);
+        
+        const fallbackText = "Ho ho ho! I'm having trouble hearing you clearly. Could you try speaking again?";
+        const fallbackAudio = await generateSantaVoice(fallbackText);
         return res.json({
-          text: "I didn't quite catch that. Can you tell me again?",
-          audioBase64
+          text: fallbackText,
+          audioBase64: fallbackAudio
         });
       }
-
-      // 3) Generate ChatGPT response
-      const systemPrompt = getSantaPrompt
-        ? getSantaPrompt(child.name, child.age)
-        : `You are Santa Claus talking to ${child.name}, who is ${child.age} years old. Be warm, magical, encouraging, and keep responses conversational and under 150 words. Ask follow-up questions to keep the conversation going.`;
-
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userMessage },
-        ],
-        max_tokens: 200,
-        temperature: 0.8,
-      });
-
-      santaResponse = completion.choices?.[0]?.message?.content?.trim() || 
-                    "Ho ho ho! That's wonderful! Tell me more!";
-
-      console.log(`User said: "${userMessage}"`);
-      console.log(`Santa responds: "${santaResponse}"`);
-
-      // Clean up uploaded audio file
-      await fs.unlink(audioFile.path).catch(console.error);
     }
 
     // 4) Generate Santa's voice using ElevenLabs

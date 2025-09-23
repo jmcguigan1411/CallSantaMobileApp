@@ -8,8 +8,9 @@ export const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(false); // for all login/register/social actions
-  const [loaded, setLoaded] = useState(false);   // true once token check completes
+  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
 
   // Load stored token on app start
   useEffect(() => {
@@ -29,6 +30,13 @@ export const AuthProvider = ({ children }) => {
     loadUser();
   }, []);
 
+  // Check if user needs to see terms after login/register
+  const checkTermsAcceptance = (userData) => {
+    if (userData && !userData.hasAcceptedTerms) {
+      setShowTermsModal(true);
+    }
+  };
+
   // Email/password login
   const login = async (email, password) => {
     setLoading(true);
@@ -39,6 +47,7 @@ export const AuthProvider = ({ children }) => {
       console.log('[AuthContext] Login successful, storing token');
       setUser(data);
       await AsyncStorage.setItem('token', data.token);
+      checkTermsAcceptance(data);
       return data;
     } catch (error) {
       console.error('LOGIN ERROR:', error);
@@ -59,6 +68,7 @@ export const AuthProvider = ({ children }) => {
       console.log('[AuthContext] Registration successful, storing token');
       setUser(data);
       await AsyncStorage.setItem('token', data.token);
+      checkTermsAcceptance(data);
       return data;
     } catch (error) {
       console.error('REGISTER ERROR:', error);
@@ -79,6 +89,7 @@ export const AuthProvider = ({ children }) => {
       console.log(`[AuthContext] ${provider} login successful, storing token`);
       setUser(data);
       await AsyncStorage.setItem('token', data.token);
+      checkTermsAcceptance(data);
       return data;
     } catch (error) {
       console.error('SOCIAL LOGIN ERROR:', error);
@@ -89,10 +100,27 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Accept terms
+  const acceptTerms = async () => {
+    try {
+      const token = user?.token;
+      if (!token) return;
+      
+      await authService.acceptTerms(token);
+      setUser(prev => ({ ...prev, hasAcceptedTerms: true }));
+      setShowTermsModal(false);
+      console.log('[AuthContext] Terms accepted successfully');
+    } catch (error) {
+      console.error('Accept terms error:', error);
+      Alert.alert('Error', 'Failed to accept terms. Please try again.');
+    }
+  };
+
   // Logout
   const logout = async () => {
     console.log('[AuthContext] Logging out, removing token');
     setUser(null);
+    setShowTermsModal(false);
     await AsyncStorage.removeItem('token');
   };
 
@@ -101,7 +129,7 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     try {
       const token = user?.token;
-      const res = await fetch('http://localhost:5000/api/auth/update-profile', {
+      const res = await fetch('http://192.168.1.137:5000/api/auth/update-profile', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -112,7 +140,6 @@ export const AuthProvider = ({ children }) => {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to update profile');
       
-      // Update context with new user info
       setUser(prev => ({ ...prev, ...data }));
       if (data.token) {
         console.log('[AuthContext] Profile updated, storing new token');
@@ -128,24 +155,20 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Debug logging for token access
   const token = user?.token;
-  console.log('[AuthContext] Current state:', {
-    hasUser: !!user,
-    hasToken: !!token,
-    loaded
-  });
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        token: user?.token, // Expose token directly for easy access
+        token,
         loading,
         loaded,
+        showTermsModal,
         login,
         register,
         socialLogin,
+        acceptTerms,
         logout,
         updateProfile,
       }}

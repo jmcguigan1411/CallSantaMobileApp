@@ -32,6 +32,14 @@ const userSchema = new mongoose.Schema(
       enum: ["local", "google", "apple"],
       default: "local",
     },
+    hasAcceptedTerms: {
+      type: Boolean,
+      default: false,
+    },
+    termsAcceptedAt: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true }
 );

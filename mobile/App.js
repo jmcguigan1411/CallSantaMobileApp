@@ -1,14 +1,13 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createDrawerNavigator } from '@react-navigation/drawer';
-
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, AuthContext } from './context/AuthContext';
 import ProtectedScreen from './components/ProtectedScreen';
 import LogoutButton from './components/LogoutButton';
-
+import TermsModal from './components/TermsModal';
 import LoginScreen from './screens/LoginScreen';
 import RegisterScreen from './screens/RegisterScreen';
 import ParentDashboard from './screens/ParentDashboard';
@@ -47,36 +46,46 @@ function AppDrawer() {
   );
 }
 
+function AppContent() {
+  const { showTermsModal, acceptTerms } = useContext(AuthContext);
+  
+  return (
+    <>
+      <NavigationContainer>
+        <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false }}>
+          {/* Public screens */}
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Register" component={RegisterScreen} />
+          {/* Protected Drawer */}
+          <Stack.Screen name="AppDrawer">
+            {props => (
+              <ProtectedScreen navigation={props.navigation}>
+                <AppDrawer {...props} />
+              </ProtectedScreen>
+            )}
+          </Stack.Screen>
+          {/* Santa Chat remains full screen outside drawer */}
+          <Stack.Screen name="SantaChat">
+            {props => (
+              <ProtectedScreen navigation={props.navigation}>
+                <SantaChatScreen {...props} />
+              </ProtectedScreen>
+            )}
+          </Stack.Screen>
+        </Stack.Navigator>
+      </NavigationContainer>
+      
+      <TermsModal visible={showTermsModal} onAccept={acceptTerms} />
+      <StatusBar style="auto" />
+    </>
+  );
+}
+
 export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>
-        <NavigationContainer>
-          <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false }}>
-            {/* Public screens */}
-            <Stack.Screen name="Login" component={LoginScreen} />
-            <Stack.Screen name="Register" component={RegisterScreen} />
-
-            {/* Protected Drawer */}
-            <Stack.Screen name="AppDrawer">
-              {props => (
-                <ProtectedScreen navigation={props.navigation}>
-                  <AppDrawer {...props} />
-                </ProtectedScreen>
-              )}
-            </Stack.Screen>
-
-            {/* Santa Chat remains full screen outside drawer */}
-            <Stack.Screen name="SantaChat">
-              {props => (
-                <ProtectedScreen navigation={props.navigation}>
-                  <SantaChatScreen {...props} />
-                </ProtectedScreen>
-              )}
-            </Stack.Screen>
-          </Stack.Navigator>
-          <StatusBar style="auto" />
-        </NavigationContainer>
+        <AppContent />
       </AuthProvider>
     </GestureHandlerRootView>
   );

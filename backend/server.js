@@ -1,19 +1,18 @@
-// server.js
 const path = require("path");
 const fs = require("fs");
-
 // Ensure tmp directory exists for audio files
 const tmpDir = path.join(__dirname, "tmp");
 if (!fs.existsSync(tmpDir)) {
   fs.mkdirSync(tmpDir, { recursive: true });
   console.log("📁 Created tmp directory for audio files");
 }
+
 const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
-
+const compression = require("compression"); // Add compression
 const connectDB = require("./config/db");
-const { errorHandler } = require("./middleware/errorHandler"); // centralized error handling
+const { errorHandler } = require("./middleware/errorHandler");
 
 // Load environment variables
 dotenv.config();
@@ -23,11 +22,14 @@ connectDB();
 
 const app = express();
 
+// Enable compression for faster responses
+app.use(compression());
+
 // Serve static files for Santa audio
 app.use("/tmp", express.static(path.join(__dirname, "tmp")));
 
 // Middleware
-app.use(express.json());
+app.use(express.json({ limit: '10mb' })); // Increase limit for audio uploads
 app.use(cors()); // TODO: restrict origin in production
 
 // Health check / root route
@@ -41,7 +43,6 @@ const profileRoutes = require("./routes/profileRoutes");
 const wishlistRoutes = require("./routes/wishlistRoutes");
 const aiRoutes = require("./routes/aiRoutes");
 const childRoutes = require("./routes/childRoutes");
-
 
 app.use("/api/auth", authRoutes);
 app.use("/api/profile", profileRoutes);
