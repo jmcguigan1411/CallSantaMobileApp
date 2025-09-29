@@ -1,5 +1,6 @@
 const path = require("path");
 const fs = require("fs");
+
 // Ensure tmp directory exists for audio files
 const tmpDir = path.join(__dirname, "tmp");
 if (!fs.existsSync(tmpDir)) {
@@ -7,10 +8,17 @@ if (!fs.existsSync(tmpDir)) {
   console.log("📁 Created tmp directory for audio files");
 }
 
+// Ensure audio-recordings directory exists for permanent storage
+const audioRecordingsDir = path.join(__dirname, "audio-recordings");
+if (!fs.existsSync(audioRecordingsDir)) {
+  fs.mkdirSync(audioRecordingsDir, { recursive: true });
+  console.log("📁 Created audio-recordings directory for permanent storage");
+}
+
 const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
-const compression = require("compression"); // Add compression
+const compression = require("compression");
 const connectDB = require("./config/db");
 const { errorHandler } = require("./middleware/errorHandler");
 
@@ -25,14 +33,15 @@ const app = express();
 // Enable compression for faster responses
 app.use(compression());
 
-// Serve static files for Santa audio
+// Serve static files
 app.use("/tmp", express.static(path.join(__dirname, "tmp")));
+app.use("/audio-recordings", express.static(path.join(__dirname, "audio-recordings")));
 
 // Middleware
-app.use(express.json({ limit: '10mb' })); // Increase limit for audio uploads
-app.use(cors()); // TODO: restrict origin in production
+app.use(express.json({ limit: '10mb' }));
+app.use(cors());
 
-// Health check / root route
+// Health check
 app.get("/", (req, res) => {
   res.send("🎅 Santa API is live!");
 });
@@ -43,12 +52,14 @@ const profileRoutes = require("./routes/profileRoutes");
 const wishlistRoutes = require("./routes/wishlistRoutes");
 const aiRoutes = require("./routes/aiRoutes");
 const childRoutes = require("./routes/childRoutes");
+const audioRoutes = require("./routes/audioRoutes");
 
 app.use("/api/auth", authRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/wishlist", wishlistRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/children", childRoutes);
+app.use("/api/audio", audioRoutes);
 
 // Error handler (must come last)
 app.use(errorHandler);

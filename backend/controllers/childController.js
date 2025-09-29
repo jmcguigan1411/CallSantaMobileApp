@@ -45,6 +45,7 @@ exports.addChild = async (req, res) => {
       phoneticSpelling,
       pronunciationSamples: pronunciationSamples || [],
       parent: req.user._id,
+      wishlist: [], // Initialize empty wishlist
     });
 
     console.log('[DEBUG] Child created:', child);

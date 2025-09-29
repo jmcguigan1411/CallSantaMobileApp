@@ -5,6 +5,7 @@ const path = require("path");
 const fs = require("fs/promises");
 const fsSync = require("fs");
 const ChildProfile = require("../models/ChildProfile");
+const AudioRecording = require("../models/AudioRecording");
 const { getSantaPrompt } = require("../utils/santaPersona");
 
 const openai = new OpenAI({
@@ -23,6 +24,57 @@ async function saveAudioBuffer(buffer, ext = "mp3") {
   return `/tmp/${filename}`; // express.static will serve this
 }
 
+// --- NEW: Save audio recording to database ---
+async function saveAudioRecording(childId, parentId, audioFilePath, transcription) {
+  try {
+    console.log(`🔍 saveAudioRecording called with:`, { childId, parentId, audioFilePath, transcriptionLength: transcription?.length });
+    
+    const child = await ChildProfile.findById(childId);
+    if (!child) {
+      console.log(`❌ Child not found: ${childId}`);
+      return null;
+    }
+
+    // Get next sequence number
+    const lastRecording = await AudioRecording.findOne({ child: childId })
+      .sort({ sequenceNumber: -1 });
+    const sequenceNumber = lastRecording ? lastRecording.sequenceNumber + 1 : 1;
+
+    // Get file info
+    const stats = await fs.stat(audioFilePath);
+    const filename = `${child.name.toLowerCase().replace(/\s+/g, '_')}_audio_${sequenceNumber}.m4a`;
+
+    // Create permanent storage directory
+    const permanentDir = path.join(__dirname, '..', 'audio-recordings');
+    if (!fsSync.existsSync(permanentDir)) {
+      fsSync.mkdirSync(permanentDir, { recursive: true });
+    }
+
+    // Copy file to permanent location
+    const permanentPath = path.join(permanentDir, filename);
+    await fs.copyFile(audioFilePath, permanentPath);
+
+    // Save to database
+    const recording = new AudioRecording({
+      child: childId,
+      parent: parentId,
+      filename,
+      sequenceNumber,
+      transcription,
+      fileSize: stats.size,
+      filePath: permanentPath
+    });
+
+    await recording.save();
+    console.log(`✅ Saved audio recording: ${filename}`);
+    
+    return recording;
+  } catch (error) {
+    console.error('❌ Error saving audio recording:', error);
+    return null;
+  }
+}
+
 // --- Generate Santa's voice with ElevenLabs (OPTIMIZED) ---
 async function generateSantaVoice(text) {
   const ELEVEN_API_KEY = process.env.ELEVENLABS_API_KEY;
@@ -37,16 +89,18 @@ async function generateSantaVoice(text) {
     const elevenUrl = `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`;
     const ttsPayload = {
       text: text,
-      model_id: "eleven_turbo_v2", // Faster model
+      model_id: "eleven_turbo_v2",
       voice_settings: { 
-        stability: 0.5,              // Reduced from 0.65 for speed
-        similarity_boost: 0.7,       // Reduced from 0.75 for speed
-        style: 0.0,                  // Reduced from 0.1 for speed
-        use_speaker_boost: false     // Disabled for speed
+        stability: 0.5,
+        similarity_boost: 0.75,
+        style: 0.0,
+        use_speaker_boost: false,
+        speed: 0.85,
       },
     };
 
     console.log(`Generating voice for text: "${text.substring(0, 50)}..."`);
+    console.log(`Using Voice ID: ${VOICE_ID}`);
 
     const ttsResp = await axios.post(elevenUrl, ttsPayload, {
       headers: {
@@ -54,18 +108,24 @@ async function generateSantaVoice(text) {
         "Content-Type": "application/json",
       },
       responseType: "arraybuffer",
-      timeout: 8000, // Reduced timeout from 30s to 8s
+      timeout: 15000,
     });
 
-    // Convert to base64 for mobile app
     const audioBuffer = Buffer.from(ttsResp.data);
     const audioBase64 = audioBuffer.toString('base64');
     
-    console.log(`Generated audio: ${audioBase64.length} characters`);
+    console.log(`✅ Generated audio: ${audioBase64.length} characters`);
     return audioBase64;
 
   } catch (ttsErr) {
-    console.error("ElevenLabs TTS error:", ttsErr.response?.data || ttsErr.message);
+    if (ttsErr.response?.data) {
+      const errorData = Buffer.isBuffer(ttsErr.response.data) 
+        ? JSON.parse(ttsErr.response.data.toString('utf-8'))
+        : ttsErr.response.data;
+      console.error("❌ ElevenLabs detailed error:", errorData);
+    } else {
+      console.error("❌ ElevenLabs TTS error:", ttsErr.message);
+    }
     return null;
   }
 }
@@ -79,7 +139,7 @@ async function transcribeAudio(filePath) {
       file: fsSync.createReadStream(filePath),
       model: "whisper-1",
       language: "en",
-      response_format: "text", // Faster than JSON format
+      response_format: "text",
     });
 
     console.log(`Transcription result: "${transcription}"`);
@@ -92,9 +152,8 @@ async function transcribeAudio(filePath) {
 
 // --- Generate ChatGPT response (OPTIMIZED) ---
 async function generateSantaResponse(userMessage, child) {
-  const systemPrompt = getSantaPrompt
-    ? getSantaPrompt(child.name, child.age)
-    : `You are Santa Claus talking to ${child.name}, who is ${child.age} years old. Be warm, magical, encouraging, and keep responses conversational and under 100 words. Ask follow-up questions to keep the conversation going.`;
+  const systemPrompt = getSantaPrompt(child.name, child.age) + 
+    " Keep response under 40 words for natural conversation flow.";
 
   const completion = await openai.chat.completions.create({
     model: "gpt-4o-mini",
@@ -102,7 +161,7 @@ async function generateSantaResponse(userMessage, child) {
       { role: "system", content: systemPrompt },
       { role: "user", content: userMessage },
     ],
-    max_tokens: 150,        // Reduced from 200
+    max_tokens: 100,
     temperature: 0.8,
   });
 
@@ -120,30 +179,25 @@ exports.chatWithSanta = async (req, res) => {
   }
 
   try {
-    // 1) Find child profile (ensure child belongs to logged-in parent)
     const child = await ChildProfile.findOne({ _id: childId, parent: req.user._id });
     if (!child) return res.status(404).json({ message: "Child not found" });
 
-    // 2) Build persona prompt
-    const systemPrompt = getSantaPrompt
-      ? getSantaPrompt(child.name, child.age)
-      : `You are Santa Claus. Always be kind, magical, and encouraging.`;
+    const systemPrompt = getSantaPrompt(child.name, child.age) + 
+      " Keep response under 50 words.";
 
-    // 3) Generate Santa's text reply with OpenAI
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: message },
       ],
-      max_tokens: 250,
+      max_tokens: 150,
     });
 
     const santaResponse =
       completion.choices?.[0]?.message?.content?.trim() ||
       "Ho ho ho! Merry Christmas!";
 
-    // 4) Generate Santa's voice with ElevenLabs (optional)
     let audioUrl = null;
     try {
       const audioBuffer = await generateSantaVoice(santaResponse);
@@ -154,7 +208,6 @@ exports.chatWithSanta = async (req, res) => {
       console.error("TTS generation failed:", ttsErr);
     }
 
-    // 5) Return reply + audioUrl
     res.json({ reply: santaResponse, audioUrl });
   } catch (err) {
     console.error("chatWithSanta error:", err);
@@ -165,13 +218,12 @@ exports.chatWithSanta = async (req, res) => {
   }
 };
 
-// --- NEW: Audio chat controller for phone calls (OPTIMIZED) ---
+// --- Audio chat controller for phone calls (OPTIMIZED + RECORDING SAVE) ---
 exports.chatWithSantaAudio = async (req, res) => {
   const { childId } = req.params;
   const { isGreeting, greetingText, childName } = req.body;
 
   try {
-    // 1) Find child profile
     const child = await ChildProfile.findOne({ _id: childId, parent: req.user._id });
     if (!child) {
       return res.status(404).json({ message: "Child not found" });
@@ -181,13 +233,10 @@ exports.chatWithSantaAudio = async (req, res) => {
 
     let santaResponse;
 
-    // Handle greeting vs regular conversation
     if (isGreeting === 'true' || isGreeting === true) {
-      // This is the initial greeting
-      santaResponse = greetingText || `Ho ho ho! Hello ${childName || child.name}! This is Santa calling from the North Pole. What would you like for Christmas this year?`;
+      santaResponse = greetingText || `Ho ho ho! Hello ${childName || child.name}! What would you like for Christmas?`;
       console.log("Processing greeting:", santaResponse);
     } else {
-      // This is a regular conversation - need to process audio
       const audioFile = req.file;
       
       if (!audioFile) {
@@ -196,15 +245,24 @@ exports.chatWithSantaAudio = async (req, res) => {
 
       console.log(`Processing audio file: ${audioFile.filename} (${audioFile.size} bytes)`);
 
-      // 2) Process in parallel where possible
       try {
         // Transcribe audio using Whisper
         const userMessage = await transcribeAudio(audioFile.path);
         
+        // DEBUG LOGGING
+        console.log(`🔍 DEBUG: About to save recording`);
+        console.log(`🔍 childId: ${childId}`);
+        console.log(`🔍 parentId: ${req.user._id}`);
+        console.log(`🔍 audioFilePath: ${audioFile.path}`);
+        console.log(`🔍 transcription: "${userMessage}"`);
+        
+        // SAVE AUDIO RECORDING WITH TRANSCRIPTION
+        const savedRecording = await saveAudioRecording(childId, req.user._id, audioFile.path, userMessage);
+        console.log(`🔍 Recording saved result:`, savedRecording ? 'SUCCESS' : 'FAILED');
+        
         if (!userMessage.trim()) {
-          // Clean up file and return gentle prompt
           await fs.unlink(audioFile.path).catch(console.error);
-          const audioBase64 = await generateSantaVoice("Ho ho ho! I didn't quite catch that. Can you tell me again what you'd like for Christmas?");
+          const audioBase64 = await generateSantaVoice("I didn't catch that. Tell me again?");
           return res.json({
             text: "I didn't quite catch that. Can you tell me again?",
             audioBase64
@@ -217,13 +275,13 @@ exports.chatWithSantaAudio = async (req, res) => {
         console.log(`User said: "${userMessage}"`);
         console.log(`Santa responds: "${santaResponse}"`);
 
-        // Clean up uploaded audio file
+        // Clean up uploaded audio file from tmp
         await fs.unlink(audioFile.path).catch(console.error);
       } catch (transcriptionError) {
         console.error("Audio processing error:", transcriptionError);
         await fs.unlink(audioFile.path).catch(console.error);
         
-        const fallbackText = "Ho ho ho! I'm having trouble hearing you clearly. Could you try speaking again?";
+        const fallbackText = "I'm having trouble hearing you. Try speaking again?";
         const fallbackAudio = await generateSantaVoice(fallbackText);
         return res.json({
           text: fallbackText,
@@ -232,18 +290,17 @@ exports.chatWithSantaAudio = async (req, res) => {
       }
     }
 
-    // 4) Generate Santa's voice using ElevenLabs
     const audioBase64 = await generateSantaVoice(santaResponse);
 
     if (!audioBase64) {
-      return res.status(500).json({ 
-        message: "Failed to generate Santa's voice",
+      console.warn('⚠️ TTS failed, returning text-only response');
+      return res.json({
         text: santaResponse,
-        audioBase64: null
+        audioBase64: null,
+        ttsUnavailable: true
       });
     }
 
-    // 5) Return response
     res.json({
       text: santaResponse,
       audioBase64: audioBase64
@@ -252,13 +309,11 @@ exports.chatWithSantaAudio = async (req, res) => {
   } catch (error) {
     console.error("chatWithSantaAudio error:", error);
     
-    // Clean up uploaded file if it exists
     if (req.file) {
       await fs.unlink(req.file.path).catch(console.error);
     }
 
-    // Return fallback response
-    const fallbackText = "Ho ho ho! Santa is having some technical difficulties at the North Pole. Can you try again?";
+    const fallbackText = "Santa is having technical difficulties. Try again?";
     const fallbackAudio = await generateSantaVoice(fallbackText).catch(() => null);
 
     res.status(500).json({

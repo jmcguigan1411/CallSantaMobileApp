@@ -3,7 +3,21 @@ import { View, Text, TouchableOpacity, Image, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
+// Import your local assets
+const boyIcon = require('../assets/boy.png');
+const girlIcon = require('../assets/girl.png');
+
 export default function ChildCard({ child, isSelected, onSelect, onEdit, onDelete }) {
+  // Determine which icon to use based on gender
+  const getAvatarSource = () => {
+    if (child.avatar) {
+      return { uri: child.avatar };
+    }
+    // Default to gender-based icons
+    const gender = child.gender?.toLowerCase();
+    return gender === 'female' || gender === 'girl' ? girlIcon : boyIcon;
+  };
+
   return (
     <LinearGradient
       colors={['#d46f34ff', '#dd9b8bff']}
@@ -15,7 +29,7 @@ export default function ChildCard({ child, isSelected, onSelect, onEdit, onDelet
       <TouchableOpacity onPress={onSelect} activeOpacity={0.8}>
         <View style={styles.infoRow}>
           <Image
-            source={{ uri: child.avatar || 'https://i.pravatar.cc/100' }}
+            source={getAvatarSource()}
             style={styles.avatar}
           />
           <View style={{ flex: 1, marginLeft: 15 }}>
@@ -30,7 +44,6 @@ export default function ChildCard({ child, isSelected, onSelect, onEdit, onDelet
           {isSelected && <Ionicons name="checkmark-circle" size={24} color="#FFD700" />}
         </View>
       </TouchableOpacity>
-
       <View style={styles.buttonRow}>
         {onEdit && (
           <TouchableOpacity style={[styles.button, { backgroundColor: '#4CAF50' }]} onPress={onEdit}>

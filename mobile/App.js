@@ -14,9 +14,31 @@ import ParentDashboard from './screens/ParentDashboard';
 import ChildProfileScreen from './screens/ChildProfileScreen';
 import SantaChatScreen from './screens/SantaChatScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
+import AudioFilesScreen from './screens/AudioFilesScreen';
+import { TouchableOpacity, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 const Stack = createNativeStackNavigator();
 const Drawer = createDrawerNavigator();
+
+// Custom Drawer Toggle Button with festive styling
+function CustomDrawerToggle({ navigation }) {
+  return (
+    <TouchableOpacity
+      onPress={() => navigation.toggleDrawer()}
+      style={{
+        marginLeft: 15,
+        backgroundColor: 'rgba(255, 255, 255, 0.2)',
+        padding: 8,
+        borderRadius: 10,
+        borderWidth: 2,
+        borderColor: '#fff',
+      }}
+    >
+      <Ionicons name="menu" size={24} color="#fff" />
+    </TouchableOpacity>
+  );
+}
 
 // Drawer content screens
 function AppDrawer() {
@@ -24,23 +46,99 @@ function AppDrawer() {
     <Drawer.Navigator
       initialRouteName="ParentDashboard"
       screenOptions={({ navigation }) => ({
-        headerRight: () => <LogoutButton navigation={navigation} />,
+        headerStyle: {
+          backgroundColor: '#165B33',
+          shadowColor: '#FFD700',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.3,
+          shadowRadius: 4,
+          elevation: 5,
+          height: 110,
+        },
+        headerTintColor: '#fff',
+        headerTitleStyle: {
+          fontWeight: 'bold',
+          fontSize: 22,
+          letterSpacing: 1,
+          textShadowColor: 'rgba(0, 0, 0, 0.3)',
+          textShadowOffset: { width: 1, height: 1 },
+          textShadowRadius: 3,
+          marginLeft: -140,
+        },
+        headerRight: () => (
+          <View style={{ marginRight: -10 }}>
+            <LogoutButton navigation={navigation} />
+          </View>
+        ),
+        headerLeft: () => <CustomDrawerToggle navigation={navigation} />,
+        headerLeftContainerStyle: {
+          paddingLeft: 0,
+        },
+        headerRightContainerStyle: {
+          paddingRight: 0,
+        },
+        headerTitleContainerStyle: {
+          left: 60,
+          right: 120,
+        },
+        drawerStyle: {
+          backgroundColor: '#165B33',
+          width: 280,
+        },
+        drawerActiveBackgroundColor: 'rgba(255, 215, 0, 0.3)',
+        drawerActiveTintColor: '#FFD700',
+        drawerInactiveTintColor: '#fff',
+        drawerLabelStyle: {
+          fontSize: 18,
+          fontWeight: '600',
+          letterSpacing: 0.5,
+        },
+        drawerItemStyle: {
+          borderRadius: 10,
+          marginVertical: 5,
+          marginHorizontal: 10,
+        },
       })}
     >
       <Drawer.Screen
         name="ParentDashboard"
         component={ParentDashboard}
-        options={{ title: 'Dashboard' }}
+        options={{
+          title: 'Dashboard',
+          drawerIcon: ({ color, size }) => (
+            <Ionicons name="home" size={size} color={color} />
+          ),
+        }}
       />
       <Drawer.Screen
         name="ChildProfile"
         component={ChildProfileScreen}
-        options={{ title: 'Child Profile' }}
+        options={{
+          title: 'Child Profile',
+          drawerIcon: ({ color, size }) => (
+            <Ionicons name="person-add" size={size} color={color} />
+          ),
+        }}
+      />
+      <Drawer.Screen
+        name="AudioFiles"
+        component={AudioFilesScreen}
+        options={{
+          title: 'Audio Files',
+          drawerIcon: ({ color, size }) => (
+            <Ionicons name="musical-notes" size={size} color={color} />
+          ),
+        }}
       />
       <Drawer.Screen
         name="EditProfile"
         component={EditProfileScreen}
-        options={{ title: 'Edit Profile' }}
+        options={{
+          title: 'Edit Profile',
+          drawerIcon: ({ color, size }) => (
+            <Ionicons name="settings" size={size} color={color} />
+          ),
+        }}
       />
     </Drawer.Navigator>
   );
@@ -48,15 +146,14 @@ function AppDrawer() {
 
 function AppContent() {
   const { showTermsModal, acceptTerms } = useContext(AuthContext);
-  
+ 
   return (
     <>
       <NavigationContainer>
         <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false }}>
-          {/* Public screens */}
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="Register" component={RegisterScreen} />
-          {/* Protected Drawer */}
+          
           <Stack.Screen name="AppDrawer">
             {props => (
               <ProtectedScreen navigation={props.navigation}>
@@ -64,7 +161,7 @@ function AppContent() {
               </ProtectedScreen>
             )}
           </Stack.Screen>
-          {/* Santa Chat remains full screen outside drawer */}
+          
           <Stack.Screen name="SantaChat">
             {props => (
               <ProtectedScreen navigation={props.navigation}>
@@ -74,9 +171,9 @@ function AppContent() {
           </Stack.Screen>
         </Stack.Navigator>
       </NavigationContainer>
-      
+     
       <TermsModal visible={showTermsModal} onAccept={acceptTerms} />
-      <StatusBar style="auto" />
+      <StatusBar style="light" />
     </>
   );
 }

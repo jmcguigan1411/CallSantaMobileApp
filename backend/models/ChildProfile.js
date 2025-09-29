@@ -6,6 +6,7 @@ const ChildProfileSchema = new mongoose.Schema({
   gender: { type: String, required: false },
   phoneticSpelling: { type: String, required: false },
   pronunciationSamples: { type: [String], default: [] },
+  wishlist: [String],
   parent: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 }, { timestamps: true });
 
