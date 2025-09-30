@@ -10,16 +10,71 @@ const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "7d" });
 };
 
+// Password validation function
+const validatePassword = (password) => {
+  const errors = [];
+  
+  if (password.length < 10) {
+    errors.push('Password must be at least 10 characters');
+  }
+  if (password.length > 30) {
+    errors.push('Password must be no more than 30 characters');
+  }
+  if (!/[A-Z]/.test(password)) {
+    errors.push('Password must contain at least 1 uppercase letter');
+  }
+  if (!/[0-9]/.test(password)) {
+    errors.push('Password must contain at least 1 number');
+  }
+  if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+    errors.push('Password must contain at least 1 special character');
+  }
+  
+  // Check for sequential numbers (123, 234, 321, etc.)
+  for (let i = 0; i < password.length - 2; i++) {
+    const char1 = password.charCodeAt(i);
+    const char2 = password.charCodeAt(i + 1);
+    const char3 = password.charCodeAt(i + 2);
+    
+    // Check if all three are digits
+    if (char1 >= 48 && char1 <= 57 && char2 >= 48 && char2 <= 57 && char3 >= 48 && char3 <= 57) {
+      // Check ascending (123, 234, etc.)
+      if (char2 === char1 + 1 && char3 === char2 + 1) {
+        errors.push('Password must not contain sequential numbers (e.g., 123)');
+        break;
+      }
+      // Check descending (321, 210, etc.)
+      if (char2 === char1 - 1 && char3 === char2 - 1) {
+        errors.push('Password must not contain sequential numbers (e.g., 321)');
+        break;
+      }
+    }
+  }
+  
+  return errors;
+};
+
 // @desc    Register a new parent (local email/password)
 // @route   POST /api/auth/register
 // @access  Public
 exports.registerParent = async (req, res) => {
   const { name, email, password } = req.body;
+  
   try {
+    // Validate password
+    const passwordErrors = validatePassword(password);
+    if (passwordErrors.length > 0) {
+      return res.status(400).json({ 
+        message: 'Password validation failed', 
+        errors: passwordErrors 
+      });
+    }
+
     const userExists = await User.findOne({ email });
     if (userExists) {
       return res.status(400).json({ message: "Email already registered" });
     }
+    
     const user = await User.create({
       name,
       email,
@@ -27,6 +82,7 @@ exports.registerParent = async (req, res) => {
       role: "parent",
       provider: "local",
     });
+    
     res.status(201).json({
       _id: user._id,
       name: user.name,
