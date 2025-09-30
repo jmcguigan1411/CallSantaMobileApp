@@ -21,7 +21,6 @@ import { Ionicons } from '@expo/vector-icons';
 const Stack = createNativeStackNavigator();
 const Drawer = createDrawerNavigator();
 
-// Custom Drawer Toggle Button with festive styling
 function CustomDrawerToggle({ navigation }) {
   return (
     <TouchableOpacity
@@ -40,7 +39,6 @@ function CustomDrawerToggle({ navigation }) {
   );
 }
 
-// Drawer content screens
 function AppDrawer() {
   return (
     <Drawer.Navigator
@@ -110,16 +108,7 @@ function AppDrawer() {
           ),
         }}
       />
-      <Drawer.Screen
-        name="ChildProfile"
-        component={ChildProfileScreen}
-        options={{
-          title: 'Child Profile',
-          drawerIcon: ({ color, size }) => (
-            <Ionicons name="person-add" size={size} color={color} />
-          ),
-        }}
-      />
+      {/* REMOVED: Child Profile from drawer menu */}
       <Drawer.Screen
         name="AudioFiles"
         component={AudioFilesScreen}
@@ -158,6 +147,15 @@ function AppContent() {
             {props => (
               <ProtectedScreen navigation={props.navigation}>
                 <AppDrawer {...props} />
+              </ProtectedScreen>
+            )}
+          </Stack.Screen>
+          
+          {/* Keep ChildProfile in stack for navigation from dashboard */}
+          <Stack.Screen name="ChildProfile">
+            {props => (
+              <ProtectedScreen navigation={props.navigation}>
+                <ChildProfileScreen {...props} />
               </ProtectedScreen>
             )}
           </Stack.Screen>

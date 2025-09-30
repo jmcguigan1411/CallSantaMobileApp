@@ -1,24 +1,41 @@
-// mobile/screens/RegisterScreen.js
 import React, { useState, useContext } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, Platform, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, ScrollView, Alert } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
 import Snowflakes from '../components/Snowflakes';
+import PasswordStrengthIndicator from '../components/PasswordStrengthIndicator';
+import { isPasswordValid } from '../utils/passwordValidation';
 
 export default function RegisterScreen({ navigation }) {
   const { register, loading } = useContext(AuthContext);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleRegister = async () => {
+    if (!name.trim()) {
+      Alert.alert('Error', 'Please enter your name');
+      return;
+    }
+    
+    if (!email.trim()) {
+      Alert.alert('Error', 'Please enter your email');
+      return;
+    }
+    
+    if (!isPasswordValid(password)) {
+      Alert.alert('Error', 'Please meet all password requirements');
+      return;
+    }
+
     const data = await register(name, email, password);
     if (data) {
-      navigation.replace('ParentDashboard');
+      navigation.replace('AppDrawer');
     }
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#b71c1c', justifyContent: 'center' }}>
+    <ScrollView style={{ flex: 1, backgroundColor: '#b71c1c' }}>
       <Snowflakes />
       <View style={styles.card}>
         <Image
@@ -62,12 +79,22 @@ export default function RegisterScreen({ navigation }) {
             placeholderTextColor="#666"
             value={password}
             onChangeText={setPassword}
-            secureTextEntry
+            secureTextEntry={!showPassword}
           />
+          <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+            <Text style={styles.eyeIcon}>{showPassword ? '👁️' : '👁️‍🗨️'}</Text>
+          </TouchableOpacity>
         </View>
 
+        {/* Password Strength Indicator */}
+        {password.length > 0 && <PasswordStrengthIndicator password={password} />}
+
         {/* Register Button */}
-        <TouchableOpacity style={styles.button} onPress={handleRegister} disabled={loading}>
+        <TouchableOpacity 
+          style={[styles.button, !isPasswordValid(password) && password.length > 0 && styles.buttonDisabled]} 
+          onPress={handleRegister} 
+          disabled={loading || (password.length > 0 && !isPasswordValid(password))}
+        >
           <Text style={styles.buttonText}>{loading ? 'Loading...' : 'REGISTER'}</Text>
         </TouchableOpacity>
 
@@ -78,7 +105,7 @@ export default function RegisterScreen({ navigation }) {
           </Text>
         </Text>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -86,6 +113,7 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#fff',
     margin: 20,
+    marginTop: 60,
     padding: 20,
     borderRadius: 12,
     elevation: 5,
@@ -118,6 +146,7 @@ const styles = StyleSheet.create({
   },
   icon: { marginRight: 8, fontSize: 18 },
   input: { flex: 1, padding: 10 },
+  eyeIcon: { fontSize: 18, padding: 5 },
   button: {
     backgroundColor: '#b71c1c',
     borderRadius: 8,
@@ -125,6 +154,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     width: '100%',
     marginTop: 10,
+  },
+  buttonDisabled: {
+    backgroundColor: '#ccc',
   },
   buttonText: { color: '#fff', fontWeight: 'bold', textAlign: 'center' },
   footer: { color: '#333', marginTop: 20 },

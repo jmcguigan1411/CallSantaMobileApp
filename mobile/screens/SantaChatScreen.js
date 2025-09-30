@@ -17,7 +17,7 @@ import { chatWithSantaAudio } from '../services/aiService';
 const MAX_CALL_DURATION = 180; // 3 minutes in seconds
 const WARNING_TIME = 150; // Show warning at 2.5 minutes
 
-// Time-based VAD hook
+// Audio-level VAD hook with silence timer reset
 const useVoiceActivityDetection = (addLog) => {
   const [vadState, setVadState] = useState({
     isListening: false,
@@ -25,6 +25,7 @@ const useVoiceActivityDetection = (addLog) => {
     recordingDuration: 0,
     waitingForSilence: false,
     silenceStartTime: null,
+    audioLevel: 0,
   });
 
   const vadRef = useRef({
@@ -33,17 +34,21 @@ const useVoiceActivityDetection = (addLog) => {
     recordingStartTime: null,
     silenceTimer: null,
     durationTimer: null,
+    meteringTimer: null,
     onVoiceStart: null,
     onVoiceEnd: null,
     onSilenceDetected: null,
     hasDetectedVoice: false,
+    lastSoundTime: null,
   });
 
   const VAD_CONFIG = {
     MIN_RECORDING_TIME: 1500,
-    SILENCE_DETECTION_TIME: 3000,
-    MAX_RECORDING_TIME: 20000,
+    SILENCE_DETECTION_TIME: 5000,
+    MAX_RECORDING_TIME: 30000,
     DURATION_UPDATE_INTERVAL: 100,
+    METERING_INTERVAL: 100,
+    VOICE_THRESHOLD: -40,
   };
 
   const logSafe = (msg) => {
@@ -55,14 +60,15 @@ const useVoiceActivityDetection = (addLog) => {
   };
 
   const initializeVAD = async (recordingInstance, callbacks = {}) => {
-    logSafe('🔊 === INITIALIZING TIME-BASED VAD SYSTEM ===');
-    
+    logSafe('🔊 === INITIALIZING AUDIO-LEVEL VAD SYSTEM ===');
+
     vadRef.current.recordingRef = recordingInstance;
     vadRef.current.onVoiceStart = callbacks.onVoiceStart;
     vadRef.current.onVoiceEnd = callbacks.onVoiceEnd;
     vadRef.current.onSilenceDetected = callbacks.onSilenceDetected;
     vadRef.current.isActive = true;
     vadRef.current.recordingStartTime = Date.now();
+    vadRef.current.lastSoundTime = Date.now();
     vadRef.current.hasDetectedVoice = false;
 
     setVadState({
@@ -71,22 +77,80 @@ const useVoiceActivityDetection = (addLog) => {
       recordingDuration: 0,
       waitingForSilence: false,
       silenceStartTime: null,
+      audioLevel: 0,
     });
 
-    startTimeBasedDetection();
+    if (Platform.OS === 'ios') {
+  logSafe('🎤 Setting up iOS metering...');
+  
+  vadRef.current.meteringTimer = setInterval(async () => {
+    if (!vadRef.current.isActive || !vadRef.current.recordingRef) {
+      logSafe('⚠️ Metering stopped: VAD inactive or no recording');
+      return;
+    }
+
+    try {
+      const status = await vadRef.current.recordingRef.getStatusAsync();
+      
+      // Debug: Always log metering status
+      logSafe(`📊 Metering: ${status.metering !== undefined ? status.metering.toFixed(1) + ' dB' : 'UNDEFINED'}`);
+      
+      if (status.isRecording && status.metering !== undefined) {
+        const audioLevel = status.metering;
+        setVadState(prev => ({ ...prev, audioLevel }));
+
+        if (audioLevel > VAD_CONFIG.VOICE_THRESHOLD) {
+          vadRef.current.lastSoundTime = Date.now();
+          logSafe(`🔊 Voice detected! Last sound time updated`);
+          
+          if (!vadRef.current.hasDetectedVoice) {
+            logSafe('🗣️ FIRST VOICE DETECTED');
+            vadRef.current.hasDetectedVoice = true;
+            vadRef.current.onVoiceStart?.();
+          }
+        }
+      } else {
+        logSafe(`⚠️ Not recording or no metering: recording=${status.isRecording}, metering=${status.metering}`);
+      }
+    } catch (error) {
+      logSafe(`❌ Metering error: ${error.message}`);
+    }
+  }, VAD_CONFIG.METERING_INTERVAL);
+}
+
+    startAudioLevelDetection();
     return true;
   };
 
-  const startTimeBasedDetection = () => {
-    logSafe('⏰ === STARTING TIME-BASED DETECTION ===');
-    
-    setTimeout(() => {
-      if (vadRef.current.isActive && !vadRef.current.hasDetectedVoice) {
-        logSafe('🗣️ VOICE ACTIVITY ASSUMED (time-based)');
-        vadRef.current.hasDetectedVoice = true;
-        vadRef.current.onVoiceStart?.();
+  const startAudioLevelDetection = () => {
+    logSafe('🎤 === STARTING AUDIO LEVEL DETECTION ===');
+
+    vadRef.current.meteringTimer = setInterval(async () => {
+      if (!vadRef.current.isActive || !vadRef.current.recordingRef) {
+        return;
       }
-    }, 500);
+
+      try {
+        const status = await vadRef.current.recordingRef.getStatusAsync();
+        
+        if (status.isRecording && status.metering !== undefined) {
+          const audioLevel = status.metering;
+          setVadState(prev => ({ ...prev, audioLevel }));
+
+          if (audioLevel > VAD_CONFIG.VOICE_THRESHOLD) {
+            vadRef.current.lastSoundTime = Date.now();
+            
+            if (!vadRef.current.hasDetectedVoice) {
+              logSafe('🗣️ VOICE DETECTED');
+              vadRef.current.hasDetectedVoice = true;
+              vadRef.current.onVoiceStart?.();
+            }
+          }
+        }
+      } catch (error) {
+        logSafe(`⚠️ Metering error: ${error.message}`);
+      }
+    }, VAD_CONFIG.METERING_INTERVAL);
 
     vadRef.current.durationTimer = setInterval(() => {
       if (!vadRef.current.isActive) {
@@ -96,23 +160,24 @@ const useVoiceActivityDetection = (addLog) => {
 
       const currentTime = Date.now();
       const duration = currentTime - vadRef.current.recordingStartTime;
-      
+      const timeSinceLastSound = currentTime - (vadRef.current.lastSoundTime || vadRef.current.recordingStartTime);
+
       setVadState(prev => ({
         ...prev,
-        recordingDuration: duration
+        recordingDuration: duration,
+        waitingForSilence: duration >= VAD_CONFIG.MIN_RECORDING_TIME && timeSinceLastSound > 1000,
       }));
 
-      if (duration >= VAD_CONFIG.MIN_RECORDING_TIME && !vadRef.current.waitingForSilence) {
-        vadRef.current.waitingForSilence = true;
-        setVadState(prev => ({
-          ...prev,
-          waitingForSilence: true,
-          silenceStartTime: currentTime
-        }));
-        startSilenceDetection();
+      if (duration >= VAD_CONFIG.MIN_RECORDING_TIME) {
+        if (timeSinceLastSound >= VAD_CONFIG.SILENCE_DETECTION_TIME) {
+          logSafe(`✅ SILENCE DETECTED (${(timeSinceLastSound/1000).toFixed(1)}s quiet)`);
+          vadRef.current.onSilenceDetected?.();
+          stopVAD();
+        }
       }
 
       if (duration >= VAD_CONFIG.MAX_RECORDING_TIME) {
+        logSafe('⏰ MAX RECORDING TIME REACHED');
         if (vadRef.current.hasDetectedVoice) {
           vadRef.current.onSilenceDetected?.();
         } else {
@@ -120,41 +185,39 @@ const useVoiceActivityDetection = (addLog) => {
         }
         stopVAD();
       }
-    }, VAD_CONFIG.DURATION_UPDATE_INTERVAL);
-  };
 
-  const startSilenceDetection = () => {
-    vadRef.current.silenceTimer = setTimeout(() => {
-      if (vadRef.current.isActive) {
-        vadRef.current.onSilenceDetected?.();
-        stopVAD();
-      }
-    }, VAD_CONFIG.SILENCE_DETECTION_TIME);
+    }, VAD_CONFIG.DURATION_UPDATE_INTERVAL);
   };
 
   const stopVAD = () => {
     vadRef.current.isActive = false;
-    vadRef.current.waitingForSilence = false;
-    
+
     if (vadRef.current.durationTimer) {
       clearInterval(vadRef.current.durationTimer);
       vadRef.current.durationTimer = null;
     }
-    
+
+    if (vadRef.current.meteringTimer) {
+      clearInterval(vadRef.current.meteringTimer);
+      vadRef.current.meteringTimer = null;
+    }
+
     if (vadRef.current.silenceTimer) {
       clearTimeout(vadRef.current.silenceTimer);
       vadRef.current.silenceTimer = null;
     }
-    
+
     setVadState({
       isListening: false,
       isRecording: false,
       recordingDuration: 0,
       waitingForSilence: false,
       silenceStartTime: null,
+      audioLevel: 0,
     });
-    
+
     vadRef.current.hasDetectedVoice = false;
+    vadRef.current.lastSoundTime = null;
   };
 
   return { vadState, initializeVAD, stopVAD, VAD_CONFIG };
@@ -171,6 +234,7 @@ export default function SantaCallScreen({ route, navigation }) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [hasShownWarning, setHasShownWarning] = useState(false);
   const [callEnding, setCallEnding] = useState(false);
+  const [isSpeakerOn, setIsSpeakerOn] = useState(false);
 
   const addLog = (msg) => {
     if (__DEV__) {
@@ -219,10 +283,10 @@ export default function SantaCallScreen({ route, navigation }) {
       linearPCMBitDepth: 16,
       linearPCMIsBigEndian: false,
       linearPCMIsFloat: false,
+      isMeteringEnabled: true,
     },
   };
 
-  // Detect if child said goodbye
   const detectGoodbye = (text) => {
     const goodbyePhrases = [
       'goodbye', 'good bye', 'bye', 'bye bye', 'see you', 'see ya',
@@ -233,7 +297,6 @@ export default function SantaCallScreen({ route, navigation }) {
     return goodbyePhrases.some(phrase => lowerText.includes(phrase));
   };
 
-  // Handle time warning at 2.5 minutes
   const handleTimeWarning = async () => {
     if (callEnding) return;
     
@@ -264,7 +327,6 @@ export default function SantaCallScreen({ route, navigation }) {
     }
   };
 
-  // Handle time limit reached
   const handleTimeLimitReached = async () => {
     if (callEnding) return;
     setCallEnding(true);
@@ -286,7 +348,7 @@ export default function SantaCallScreen({ route, navigation }) {
       await stopFillers();
       
       if (response?.audioBase64) {
-        await playAudioFromBase64(response.audioBase64, true); // Pass true to end call after
+        await playAudioFromBase64(response.audioBase64, true);
       } else {
         setSantaSpeaking(false);
         setTimeout(() => endCall(), 1000);
@@ -299,7 +361,6 @@ export default function SantaCallScreen({ route, navigation }) {
     }
   };
 
-  // Handle goodbye from child
   const handleChildGoodbye = async () => {
     if (callEnding) return;
     setCallEnding(true);
@@ -323,7 +384,7 @@ export default function SantaCallScreen({ route, navigation }) {
       await stopFillers();
       
       if (response?.audioBase64) {
-        await playAudioFromBase64(response.audioBase64, true); // Pass true to end call after
+        await playAudioFromBase64(response.audioBase64, true);
       } else {
         setSantaSpeaking(false);
         setTimeout(() => endCall(), 1000);
@@ -333,6 +394,22 @@ export default function SantaCallScreen({ route, navigation }) {
       await stopFillers();
       setSantaSpeaking(false);
       setTimeout(() => endCall(), 1000);
+    }
+  };
+
+  const toggleSpeaker = async () => {
+    try {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: false,
+        playThroughEarpieceAndroid: !isSpeakerOn,
+        staysActiveInBackground: false,
+      });
+      setIsSpeakerOn(!isSpeakerOn);
+      addLog(`🔊 Speaker ${!isSpeakerOn ? 'ON' : 'OFF'}`);
+    } catch (error) {
+      addLog(`❌ Speaker toggle error: ${error.message}`);
     }
   };
 
@@ -411,7 +488,6 @@ export default function SantaCallScreen({ route, navigation }) {
     };
   }, []);
 
-  // Monitor call duration for timer features
   useEffect(() => {
     if (callStatus === 'In Call' && callDuration >= MAX_CALL_DURATION && !callEnding) {
       addLog('⏰ Maximum call duration reached');
@@ -609,7 +685,6 @@ export default function SantaCallScreen({ route, navigation }) {
       setIsProcessing(false);
 
       if (response?.audioBase64) {
-        // Check if child said goodbye
         if (response.text && detectGoodbye(response.text)) {
           addLog('👋 Goodbye detected');
           await handleChildGoodbye();
@@ -803,6 +878,15 @@ export default function SantaCallScreen({ route, navigation }) {
       </View>
 
       <View style={styles.controls}>
+        <TouchableOpacity
+          style={[styles.controlButton, styles.speakerButton, isSpeakerOn && styles.speakerButtonActive]}
+          onPress={toggleSpeaker}
+        >
+          <Text style={styles.speakerButtonText}>
+            {isSpeakerOn ? '🔊' : '🔈'}
+          </Text>
+        </TouchableOpacity>
+
         <TouchableOpacity 
           style={[styles.controlButton, styles.endButton]} 
           onPress={endCall}
@@ -824,7 +908,6 @@ export default function SantaCallScreen({ route, navigation }) {
     </View>
   );
 }
-
 
 const styles = StyleSheet.create({
   container: {
@@ -953,6 +1036,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingBottom: 60,
+    gap: 20,
+  },
+  speakerButton: {
+    backgroundColor: '#4488ff',
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+  },
+  speakerButtonActive: {
+    backgroundColor: '#44ff44',
+  },
+  speakerButtonText: {
+    fontSize: 40,
+    color: '#fff',
   },
   controlButton: {
     width: 90,

@@ -21,7 +21,7 @@ export default function ChildProfileScreen({ route, navigation }) {
   const { childId, onGoBack } = route.params || {};
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
-  const [gender, setGender] = useState(''); // Changed to empty string (no default)
+  const [gender, setGender] = useState('');
   const [phoneticSpelling, setPhoneticSpelling] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -41,7 +41,6 @@ export default function ChildProfileScreen({ route, navigation }) {
   }, [childId]);
 
   const handleSave = async () => {
-    // Updated validation to check for gender selection
     if (!name.trim()) {
       Alert.alert('Validation', 'Please enter the child\'s name');
       return;
@@ -63,11 +62,20 @@ export default function ChildProfileScreen({ route, navigation }) {
         gender,
         phoneticSpelling,
       };
+      
       if (childId) {
         await childService.updateChild(childId, childData);
+        Alert.alert('Success', 'Child profile updated');
       } else {
         await childService.addChild(childData);
+        Alert.alert('Success', 'Child profile created');
+        
+        setName('');
+        setAge('');
+        setGender('');
+        setPhoneticSpelling('');
       }
+      
       if (typeof onGoBack === 'function') onGoBack();
       navigation.goBack();
     } catch {
@@ -77,7 +85,6 @@ export default function ChildProfileScreen({ route, navigation }) {
     }
   };
 
-  // Gender checkbox component
   const GenderCheckbox = ({ value, label, icon }) => {
     const isSelected = gender === value;
     return (
@@ -116,58 +123,100 @@ export default function ChildProfileScreen({ route, navigation }) {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        <View style={{ flex: 1, backgroundColor: '#b71c1c' }}>
           <Snowflakes />
-
-          <Text style={styles.title}>{childId ? 'Edit Child' : 'Add Child'}</Text>
-
-          <TextInput
-            style={styles.input}
-            placeholder="Child Name *"
-            placeholderTextColor="#eee"
-            value={name}
-            onChangeText={setName}
-          />
-
-          <TextInput
-            style={styles.input}
-            placeholder="Age *"
-            placeholderTextColor="#eee"
-            value={age}
-            onChangeText={setAge}
-            keyboardType="numeric"
-          />
-
-          {/* Gender Checkboxes */}
-          <View style={styles.genderSection}>
-            <Text style={styles.sectionLabel}>Gender *</Text>
-            <View style={styles.checkboxRow}>
-              <GenderCheckbox value="male" label="Boy" icon="male" />
-              <GenderCheckbox value="female" label="Girl" icon="female" />
-            </View>
+          
+          {/* Header with Back Button */}
+          <View style={styles.header}>
+            <TouchableOpacity 
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+            >
+              <Ionicons name="arrow-back" size={28} color="#fff" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>
+              {childId ? 'Edit Child' : 'Add Child'}
+            </Text>
+            <View style={styles.headerSpacer} />
           </View>
 
-          {/* Phonetic Spelling */}
-          <TextInput
-            style={styles.input}
-            placeholder="Phonetic Spelling (e.g. Kee-rah for Ciara)"
-            placeholderTextColor="#eee"
-            value={phoneticSpelling}
-            onChangeText={setPhoneticSpelling}
-          />
+          <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+            <TextInput
+              style={styles.input}
+              placeholder="Child Name *"
+              placeholderTextColor="#eee"
+              value={name}
+              onChangeText={setName}
+            />
 
-          <TouchableOpacity style={styles.button} onPress={handleSave}>
-            <Text style={styles.buttonText}>{childId ? 'Update Child' : 'Add Child'}</Text>
-          </TouchableOpacity>
-        </ScrollView>
+            <TextInput
+              style={styles.input}
+              placeholder="Age *"
+              placeholderTextColor="#eee"
+              value={age}
+              onChangeText={setAge}
+              keyboardType="numeric"
+            />
+
+            <View style={styles.genderSection}>
+              <Text style={styles.sectionLabel}>Gender *</Text>
+              <View style={styles.checkboxRow}>
+                <GenderCheckbox value="male" label="Boy" icon="male" />
+                <GenderCheckbox value="female" label="Girl" icon="female" />
+              </View>
+            </View>
+
+            <TextInput
+              style={styles.input}
+              placeholder="Phonetic Spelling (e.g. Kee-rah for Ciara)"
+              placeholderTextColor="#eee"
+              value={phoneticSpelling}
+              onChangeText={setPhoneticSpelling}
+            />
+
+            <TouchableOpacity style={styles.button} onPress={handleSave}>
+              <Text style={styles.buttonText}>{childId ? 'Update Child' : 'Add Child'}</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
       </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, padding: 20, justifyContent: 'center', backgroundColor: '#b71c1c' },
-  title: { fontSize: 28, color: '#fff', fontWeight: 'bold', marginBottom: 30, textAlign: 'center' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingBottom: 15,
+    paddingHorizontal: 15,
+    backgroundColor: '#b71c1c',
+  },
+  backButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    fontSize: 22,
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  headerSpacer: {
+    width: 44, // Same width as back button for centering
+  },
+  container: { 
+    flexGrow: 1, 
+    padding: 20, 
+    paddingTop: 10,
+  },
+  title: { 
+    fontSize: 28, 
+    color: '#fff', 
+    fontWeight: 'bold', 
+    marginBottom: 30, 
+    textAlign: 'center' 
+  },
   input: {
     backgroundColor: '#f44336',
     color: '#fff',
@@ -234,5 +283,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   buttonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingContainer: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    backgroundColor: '#b71c1c',
+  },
 });
