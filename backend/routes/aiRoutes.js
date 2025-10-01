@@ -21,7 +21,7 @@ const upload = multer({
 router.post('/chat/:childId', protect, aiController.chatWithSanta);
 
 // Audio chat with Santa (for phone calls)
-router.post('/chat-audio/:childId', protect, upload.single('audio'), aiController.chatWithSantaAudio);
+router.post('/chat-with-santa-audio', protect, aiController.chatWithSantaAudio);
 
 // Extract wishlist from local device recordings
 router.post('/extract-wishlist-local', protect, aiController.extractWishlistLocal);
