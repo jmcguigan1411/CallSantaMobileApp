@@ -1,4 +1,5 @@
-const API_URL = 'http://192.168.1.137:5000/api/auth';
+const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.137:5000/api';
+const API_URL = 'https://callsantamobile-devicestorage.onrender.com/api/auth';
 
 export const login = async (email, password) => {
   try {

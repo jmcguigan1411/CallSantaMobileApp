@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "mobile",
+    "name": "Call Santa",
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -10,23 +10,37 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#b71c1c"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.callsanta.callsanta"
     },
     "android": {
+      "package": "com.callsanta.callsanta",
+      "versionCode": 1,
+      "permissions": ["RECORD_AUDIO"],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "edgeToEdgeEnabled": true
+        "backgroundColor": "#b71c1c"
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-web-browser"
-    ]
+      "expo-web-browser",
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Allow Call Santa to access your microphone for Santa calls"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "455c2d4e-06ce-42b4-b4a5-ad253c7231ce"
+      }
+    }
   }
 }

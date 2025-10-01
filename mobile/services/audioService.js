@@ -1,9 +1,9 @@
-const API_BASE_URL = 'http://192.168.1.137:5000/api';
+const API_BASE = 'https://callsantamobile-devicestorage.onrender.com/api';
 
 // Get all audio recordings for a child
 export const getChildAudioRecordings = async (childId, token) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/audio/child/${childId}`, {
+    const response = await fetch(`${API_BASE}/ai/chat-audio/${childId}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -46,13 +46,13 @@ export const deleteAudioRecording = async (recordingId, token) => {
 
 // Get download URL for an audio recording
 export const getAudioDownloadUrl = (recordingId, token) => {
-  return `${API_BASE_URL}/audio/${recordingId}/download?token=${token}`;
+  return `${API_BASE}/audio/${recordingId}/download?token=${token}`;
 };
 
 // Extract wishlist from audio recordings
 export const extractWishlist = async (childId, token) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/audio/child/${childId}/wishlist`, {
+    const response = await fetch(`${API_BASE}/audio/child/${childId}/wishlist`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,

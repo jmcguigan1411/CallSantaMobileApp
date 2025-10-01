@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_URL = 'http://192.168.1.137:5000/api/children'; // replace with your backend URL
-
+const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.137:5000/api';
+const API_URL = 'https://callsantamobile-devicestorage.onrender.com/api/children';
 // Helper to get auth token
 const getToken = async () => {
   const token = await AsyncStorage.getItem('token');

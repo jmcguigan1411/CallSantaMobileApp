@@ -18,11 +18,12 @@ import ChildProfileScreen from './screens/ChildProfileScreen';
 import SantaChatScreen from './screens/SantaChatScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
 import AudioFilesScreen from './screens/AudioFilesScreen';
-import { TouchableOpacity, View } from 'react-native';
+import { TouchableOpacity, View, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 const Stack = createNativeStackNavigator();
 const Drawer = createDrawerNavigator();
+const { width } = Dimensions.get('window');
 
 function CustomDrawerToggle({ navigation }) {
   return (
@@ -59,15 +60,15 @@ function AppDrawer() {
         headerTintColor: '#fff',
         headerTitleStyle: {
           fontWeight: 'bold',
-          fontSize: 22,
+          fontSize: width < 360 ? 18 : 22, // Responsive font size
           letterSpacing: 1,
           textShadowColor: 'rgba(0, 0, 0, 0.3)',
           textShadowOffset: { width: 1, height: 1 },
           textShadowRadius: 3,
-          marginLeft: -140,
         },
+        headerTitleAlign: 'center',
         headerRight: () => (
-          <View style={{ marginRight: -10 }}>
+          <View style={{ marginRight: 10 }}>
             <LogoutButton navigation={navigation} />
           </View>
         ),
@@ -79,12 +80,13 @@ function AppDrawer() {
           paddingRight: 0,
         },
         headerTitleContainerStyle: {
-          left: 60,
-          right: 120,
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
         },
         drawerStyle: {
           backgroundColor: '#165B33',
-          width: 280,
+          width: width * 0.75, // 75% of screen width
         },
         drawerActiveBackgroundColor: 'rgba(255, 215, 0, 0.3)',
         drawerActiveTintColor: '#FFD700',

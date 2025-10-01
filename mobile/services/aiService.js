@@ -1,5 +1,5 @@
 // services/aiService.js - Complete file with token debugging
-const API_BASE_URL = 'http://192.168.1.137:5000/api';
+const API_BASE = 'https://callsantamobile-devicestorage.onrender.com/api';
 
 // Function to handle Santa audio chat
 export const chatWithSantaAudio = async (childId, audioUri, token, options = {}) => {
@@ -71,7 +71,7 @@ export const chatWithSantaAudio = async (childId, audioUri, token, options = {})
     console.log('[AI Service] Authorization header:', token ? 'Bearer [TOKEN_PROVIDED]' : 'NO_AUTHORIZATION_HEADER');
 
     // FIXED: Use the correct URL that matches your backend route
-    const response = await fetch(`${API_BASE_URL}/ai/chat-audio/${childId}`, {
+    const response = await fetch(`${API_BASE}/ai/chat-audio/${childId}`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -138,7 +138,7 @@ export const chatWithSantaAudioJSON = async (childId, audioUri, token, options =
     }
 
     // FIXED: Use the correct URL that matches your backend route
-    const response = await fetch(`${API_BASE_URL}/ai/chat-audio/${childId}`, {
+    const response = await fetch(`${API_BASE}/ai/chat-audio/${childId}`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
