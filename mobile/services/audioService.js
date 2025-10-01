@@ -25,7 +25,7 @@ export const getChildAudioRecordings = async (childId, token) => {
 // Delete an audio recording
 export const deleteAudioRecording = async (recordingId, token) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/audio/${recordingId}`, {
+    const response = await fetch(`${API_BASE}/audio/${recordingId}`, {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${token}`,
