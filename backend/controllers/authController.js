@@ -1,16 +1,17 @@
-// controllers/authController.js
 const User = require("../models/User");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 const { OAuth2Client } = require("google-auth-library");
+const { sendWelcomeEmail, sendPasswordResetEmail } = require('../utils/emailService');
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-// Generate JWT for your app
+// Generate JWT
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "7d" });
 };
 
-// Password validation function
+// Password validation
 const validatePassword = (password) => {
   const errors = [];
   
@@ -30,20 +31,16 @@ const validatePassword = (password) => {
     errors.push('Password must contain at least 1 special character');
   }
   
-  // Check for sequential numbers (123, 234, 321, etc.)
   for (let i = 0; i < password.length - 2; i++) {
     const char1 = password.charCodeAt(i);
     const char2 = password.charCodeAt(i + 1);
     const char3 = password.charCodeAt(i + 2);
     
-    // Check if all three are digits
     if (char1 >= 48 && char1 <= 57 && char2 >= 48 && char2 <= 57 && char3 >= 48 && char3 <= 57) {
-      // Check ascending (123, 234, etc.)
       if (char2 === char1 + 1 && char3 === char2 + 1) {
         errors.push('Password must not contain sequential numbers (e.g., 123)');
         break;
       }
-      // Check descending (321, 210, etc.)
       if (char2 === char1 - 1 && char3 === char2 - 1) {
         errors.push('Password must not contain sequential numbers (e.g., 321)');
         break;
@@ -54,14 +51,10 @@ const validatePassword = (password) => {
   return errors;
 };
 
-// @desc    Register a new parent (local email/password)
-// @route   POST /api/auth/register
-// @access  Public
 exports.registerParent = async (req, res) => {
   const { name, email, password } = req.body;
   
   try {
-    // Validate password
     const passwordErrors = validatePassword(password);
     if (passwordErrors.length > 0) {
       return res.status(400).json({ 
@@ -83,6 +76,10 @@ exports.registerParent = async (req, res) => {
       provider: "local",
     });
     
+    sendWelcomeEmail(email, name).catch(err => 
+      console.error('Failed to send welcome email:', err)
+    );
+    
     res.status(201).json({
       _id: user._id,
       name: user.name,
@@ -95,9 +92,6 @@ exports.registerParent = async (req, res) => {
   }
 };
 
-// @desc    Login parent (local email/password)
-// @route   POST /api/auth/login
-// @access  Public
 exports.loginParent = async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -118,9 +112,6 @@ exports.loginParent = async (req, res) => {
   }
 };
 
-// @desc    Social login (Google / Apple) with automatic account creation
-// @route   POST /api/auth/social-login
-// @access  Public
 exports.socialLogin = async (req, res) => {
   try {
     const { provider, token } = req.body;
@@ -130,7 +121,6 @@ exports.socialLogin = async (req, res) => {
     let email;
     let name;
     if (provider === "google") {
-      // Verify Google token
       const ticket = await googleClient.verifyIdToken({
         idToken: token,
         audience: process.env.GOOGLE_CLIENT_ID,
@@ -139,10 +129,8 @@ exports.socialLogin = async (req, res) => {
       email = payload.email;
       name = payload.name;
     } else if (provider === "apple") {
-      // Decode Apple JWT (simplified)
       const decoded = jwt.decode(token);
       email = decoded.email || `${decoded.sub}@apple.com`;
-      // Try to get full name from Apple token
       if (decoded.name && typeof decoded.name === "object") {
         const { firstName = "", lastName = "" } = decoded.name;
         name = `${firstName} ${lastName}`.trim() || "Apple User";
@@ -152,24 +140,26 @@ exports.socialLogin = async (req, res) => {
     } else {
       return res.status(400).json({ message: "Unsupported provider" });
     }
-    // Find existing user
+    
     let user = await User.findOne({ email });
-    // If user doesn't exist, create new social account
+    
     if (!user) {
       user = new User({
         name,
         email,
-        password: null, // no password for social login
+        password: null,
         role: "parent",
         provider,
       });
       await user.save();
+      
+      sendWelcomeEmail(email, name).catch(err => 
+        console.error('Failed to send welcome email:', err)
+      );
     } else if (user.provider !== provider) {
-      // Optional: prevent login if user exists via different provider
-      // or link accounts here if you want
       console.warn(`User ${email} exists with different provider: ${user.provider}`);
     }
-    // Generate JWT for the app
+    
     const appToken = generateToken(user._id);
     res.json({
       _id: user._id,
@@ -184,9 +174,6 @@ exports.socialLogin = async (req, res) => {
   }
 };
 
-// @desc    Accept terms and conditions
-// @route   POST /api/auth/accept-terms
-// @access  Private
 exports.acceptTerms = async (req, res) => {
   try {
     const user = await User.findByIdAndUpdate(
@@ -201,6 +188,96 @@ exports.acceptTerms = async (req, res) => {
       success: true, 
       hasAcceptedTerms: user.hasAcceptedTerms 
     });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+exports.requestPasswordReset = async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: 'No account with that email exists' });
+    }
+    
+    if (user.provider !== 'local') {
+      return res.status(400).json({ 
+        message: `This account uses ${user.provider} login. Please use ${user.provider} to access your account.` 
+      });
+    }
+    
+    const resetCode = user.getResetPasswordCode();
+    await user.save();
+    
+    await sendPasswordResetEmail(user.email, user.name, resetCode);
+    
+    res.json({ message: 'Password reset code sent to your email' });
+  } catch (error) {
+    console.error('Password reset error:', error);
+    res.status(500).json({ message: 'Failed to send reset code' });
+  }
+};
+
+exports.verifyResetCode = async (req, res) => {
+  try {
+    const { email, code } = req.body;
+    
+    const resetPasswordToken = crypto
+      .createHash('sha256')
+      .update(code)
+      .digest('hex');
+    
+    const user = await User.findOne({
+      email,
+      resetPasswordToken,
+      resetPasswordExpire: { $gt: Date.now() }
+    });
+    
+    if (!user) {
+      return res.status(400).json({ message: 'Invalid or expired code' });
+    }
+    
+    res.json({ message: 'Code verified successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+exports.resetPassword = async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+    
+    const passwordErrors = validatePassword(newPassword);
+    if (passwordErrors.length > 0) {
+      return res.status(400).json({ 
+        message: 'Password validation failed', 
+        errors: passwordErrors 
+      });
+    }
+    
+    const resetPasswordToken = crypto
+      .createHash('sha256')
+      .update(code)
+      .digest('hex');
+    
+    const user = await User.findOne({
+      email,
+      resetPasswordToken,
+      resetPasswordExpire: { $gt: Date.now() }
+    });
+    
+    if (!user) {
+      return res.status(400).json({ message: 'Invalid or expired code' });
+    }
+    
+    user.password = newPassword;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpire = undefined;
+    await user.save();
+    
+    res.json({ message: 'Password reset successful' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

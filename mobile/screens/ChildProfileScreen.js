@@ -12,6 +12,7 @@ import {
   Platform,
   Keyboard,
   TouchableWithoutFeedback,
+  Switch,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as childService from '../services/childService';
@@ -23,6 +24,9 @@ export default function ChildProfileScreen({ route, navigation }) {
   const [age, setAge] = useState('');
   const [gender, setGender] = useState('');
   const [phoneticSpelling, setPhoneticSpelling] = useState('');
+  const [hasBehavioralNotes, setHasBehavioralNotes] = useState(false);
+  const [goodBehavior, setGoodBehavior] = useState('');
+  const [badBehavior, setBadBehavior] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -34,6 +38,9 @@ export default function ChildProfileScreen({ route, navigation }) {
           setAge(data.age?.toString() || '');
           setGender(data.gender || '');
           setPhoneticSpelling(data.phoneticSpelling || '');
+          setHasBehavioralNotes(data.hasBehavioralNotes || false);
+          setGoodBehavior(data.goodBehavior || '');
+          setBadBehavior(data.badBehavior || '');
         })
         .catch(() => Alert.alert('Error', 'Failed to load child data'))
         .finally(() => setLoading(false));
@@ -61,6 +68,9 @@ export default function ChildProfileScreen({ route, navigation }) {
         age,
         gender,
         phoneticSpelling,
+        hasBehavioralNotes,
+        goodBehavior: hasBehavioralNotes ? goodBehavior : '',
+        badBehavior: hasBehavioralNotes ? badBehavior : '',
       };
       
       if (childId) {
@@ -74,6 +84,9 @@ export default function ChildProfileScreen({ route, navigation }) {
         setAge('');
         setGender('');
         setPhoneticSpelling('');
+        setHasBehavioralNotes(false);
+        setGoodBehavior('');
+        setBadBehavior('');
       }
       
       if (typeof onGoBack === 'function') onGoBack();
@@ -126,7 +139,6 @@ export default function ChildProfileScreen({ route, navigation }) {
         <View style={{ flex: 1, backgroundColor: '#b71c1c' }}>
           <Snowflakes />
           
-          {/* Header with Back Button */}
           <View style={styles.header}>
             <TouchableOpacity 
               style={styles.backButton}
@@ -174,6 +186,60 @@ export default function ChildProfileScreen({ route, navigation }) {
               onChangeText={setPhoneticSpelling}
             />
 
+            {/* Behavioral Notes Toggle */}
+            <View style={styles.behaviorToggleContainer}>
+              <View style={styles.behaviorToggleHeader}>
+                <Ionicons name="list" size={24} color="#fff" />
+                <Text style={styles.behaviorToggleLabel}>Add Behavioral Notes for Santa</Text>
+              </View>
+              <Switch
+                value={hasBehavioralNotes}
+                onValueChange={setHasBehavioralNotes}
+                trackColor={{ false: '#767577', true: '#4CAF50' }}
+                thumbColor={hasBehavioralNotes ? '#FFD700' : '#f4f3f4'}
+              />
+            </View>
+
+            {hasBehavioralNotes && (
+              <View style={styles.behaviorNotesContainer}>
+                <Text style={styles.behaviorNotesTitle}>
+                  Santa will mention these during the call
+                </Text>
+                
+                <View style={styles.behaviorInputGroup}>
+                  <View style={styles.behaviorLabelRow}>
+                    <Ionicons name="happy" size={20} color="#4CAF50" />
+                    <Text style={styles.behaviorLabel}>Good Behavior (Nice List)</Text>
+                  </View>
+                  <TextInput
+                    style={[styles.input, styles.behaviorInput]}
+                    placeholder="E.g., Helped with chores, kind to siblings..."
+                    placeholderTextColor="#ccc"
+                    value={goodBehavior}
+                    onChangeText={setGoodBehavior}
+                    multiline
+                    numberOfLines={3}
+                  />
+                </View>
+
+                <View style={styles.behaviorInputGroup}>
+                  <View style={styles.behaviorLabelRow}>
+                    <Ionicons name="sad" size={20} color="#FF5252" />
+                    <Text style={styles.behaviorLabel}>Bad Behavior (Naughty List)</Text>
+                  </View>
+                  <TextInput
+                    style={[styles.input, styles.behaviorInput]}
+                    placeholder="E.g., Not listening, arguing with parents..."
+                    placeholderTextColor="#ccc"
+                    value={badBehavior}
+                    onChangeText={setBadBehavior}
+                    multiline
+                    numberOfLines={3}
+                  />
+                </View>
+              </View>
+            )}
+
             <TouchableOpacity style={styles.button} onPress={handleSave}>
               <Text style={styles.buttonText}>{childId ? 'Update Child' : 'Add Child'}</Text>
             </TouchableOpacity>
@@ -203,19 +269,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   headerSpacer: {
-    width: 44, // Same width as back button for centering
+    width: 44,
   },
   container: { 
     flexGrow: 1, 
     padding: 20, 
     paddingTop: 10,
-  },
-  title: { 
-    fontSize: 28, 
-    color: '#fff', 
-    fontWeight: 'bold', 
-    marginBottom: 30, 
-    textAlign: 'center' 
   },
   input: {
     backgroundColor: '#f44336',
@@ -274,6 +333,58 @@ const styles = StyleSheet.create({
   checkboxLabelActive: {
     fontWeight: 'bold',
     color: '#FFD700',
+  },
+  behaviorToggleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#f44336',
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 15,
+  },
+  behaviorToggleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  behaviorToggleLabel: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 10,
+  },
+  behaviorNotesContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 15,
+  },
+  behaviorNotesTitle: {
+    color: '#FFD700',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  behaviorInputGroup: {
+    marginBottom: 15,
+  },
+  behaviorLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  behaviorLabel: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  behaviorInput: {
+    minHeight: 80,
+    textAlignVertical: 'top',
+    paddingTop: 12,
   },
   button: {
     backgroundColor: '#4CAF50',

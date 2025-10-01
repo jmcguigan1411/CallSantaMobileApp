@@ -1,26 +1,14 @@
-// routes/aiRoutes.js
-const express = require("express");
-const multer = require("multer");
+const express = require('express');
 const router = express.Router();
-const { chatWithSanta, chatWithSantaAudio } = require("../controllers/aiController");
-const { protect } = require("../middleware/authMiddleware");
+const multer = require('multer');
+const aiController = require('../controllers/aiController');
+const { protect } = require('../middleware/authMiddleware');
 
 // Configure multer for audio file uploads
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'tmp/'); // Make sure this directory exists
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, 'audio-' + uniqueSuffix + '.m4a');
-  }
-});
-
-const upload = multer({ 
-  storage: storage,
+const upload = multer({
+  dest: 'tmp/',
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
-  fileFilter: function (req, file, cb) {
-    // Accept audio files
+  fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith('audio/')) {
       cb(null, true);
     } else {
@@ -29,10 +17,13 @@ const upload = multer({
   }
 });
 
-// Existing text chat route
-router.post("/chat/:childId", protect, chatWithSanta);
+// Text chat with Santa
+router.post('/chat/:childId', protect, aiController.chatWithSanta);
 
-// NEW: Audio chat route for Santa calls
-router.post("/chat-audio/:childId", protect, upload.single('audio'), chatWithSantaAudio);
+// Audio chat with Santa (for phone calls)
+router.post('/chat-audio/:childId', protect, upload.single('audio'), aiController.chatWithSantaAudio);
+
+// Extract wishlist from local device recordings
+router.post('/extract-wishlist-local', protect, aiController.extractWishlistLocal);
 
 module.exports = router;

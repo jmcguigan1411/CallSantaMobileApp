@@ -1,7 +1,6 @@
-// routes/authRoutes.js
 const express = require("express");
 const router = express.Router();
-const { registerParent, loginParent, socialLogin, acceptTerms } = require("../controllers/authController");
+const { registerParent, loginParent, socialLogin, acceptTerms, requestPasswordReset, verifyResetCode, resetPassword } = require("../controllers/authController");
 const { protect } = require("../middleware/authMiddleware");
 
 // Register
@@ -15,5 +14,10 @@ router.post("/social-login", socialLogin);
 
 // Accept Terms
 router.post("/accept-terms", protect, acceptTerms);
+
+// Password Reset
+router.post('/request-password-reset', requestPasswordReset);
+router.post('/verify-reset-code', verifyResetCode);
+router.post('/reset-password', resetPassword);
 
 module.exports = router;

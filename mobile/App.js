@@ -10,6 +10,9 @@ import LogoutButton from './components/LogoutButton';
 import TermsModal from './components/TermsModal';
 import LoginScreen from './screens/LoginScreen';
 import RegisterScreen from './screens/RegisterScreen';
+import ForgotPasswordScreen from './screens/ForgotPasswordScreen';
+import VerifyResetCodeScreen from './screens/VerifyResetCodeScreen';
+import ResetPasswordScreen from './screens/ResetPasswordScreen';
 import ParentDashboard from './screens/ParentDashboard';
 import ChildProfileScreen from './screens/ChildProfileScreen';
 import SantaChatScreen from './screens/SantaChatScreen';
@@ -108,7 +111,6 @@ function AppDrawer() {
           ),
         }}
       />
-      {/* REMOVED: Child Profile from drawer menu */}
       <Drawer.Screen
         name="AudioFiles"
         component={AudioFilesScreen}
@@ -142,6 +144,9 @@ function AppContent() {
         <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false }}>
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="Register" component={RegisterScreen} />
+          <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+          <Stack.Screen name="VerifyResetCode" component={VerifyResetCodeScreen} />
+          <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
           
           <Stack.Screen name="AppDrawer">
             {props => (
@@ -151,7 +156,6 @@ function AppContent() {
             )}
           </Stack.Screen>
           
-          {/* Keep ChildProfile in stack for navigation from dashboard */}
           <Stack.Screen name="ChildProfile">
             {props => (
               <ProtectedScreen navigation={props.navigation}>

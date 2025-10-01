@@ -33,7 +33,6 @@ export default function LoginScreen({ navigation }) {
 
           await socialLogin('google', authentication.accessToken, userInfo.email);
 
-          // Reset navigation to AppDrawer so burger menu works
           navigation.reset({
             index: 0,
             routes: [{ name: 'AppDrawer' }],
@@ -116,6 +115,13 @@ export default function LoginScreen({ navigation }) {
           <Text style={styles.buttonText}>{loading ? 'Loading...' : 'LOGIN'}</Text>
         </TouchableOpacity>
 
+        <TouchableOpacity
+          style={styles.forgotPasswordButton}
+          onPress={() => navigation.navigate('ForgotPassword')}
+        >
+          <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+        </TouchableOpacity>
+
         {/* Google Login */}
         <TouchableOpacity
           style={[styles.button, { backgroundColor: '#4285F4' }]}
@@ -137,7 +143,7 @@ export default function LoginScreen({ navigation }) {
         )}
 
         <Text style={styles.footer}>
-          Don’t have an account?{' '}
+          Don't have an account?{' '}
           <Text style={styles.link} onPress={() => navigation.navigate('Register')}>
             Sign Up
           </Text>
@@ -192,6 +198,15 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   buttonText: { color: '#fff', fontWeight: 'bold', textAlign: 'center' },
+  forgotPasswordButton: {
+    marginTop: 15,
+    alignSelf: 'center',
+  },
+  forgotPasswordText: {
+    color: '#b71c1c',
+    fontSize: 14,
+    fontWeight: '600',
+  },
   footer: { color: '#333', marginTop: 20 },
   link: { color: '#b71c1c', fontWeight: 'bold' },
 });

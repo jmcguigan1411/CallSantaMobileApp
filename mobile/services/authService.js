@@ -1,4 +1,3 @@
-// mobile/services/authService.js
 const API_URL = 'http://192.168.1.137:5000/api/auth';
 
 export const login = async (email, password) => {
@@ -60,7 +59,7 @@ export const acceptTerms = async (token) => {
   try {
     const res = await fetch(`${API_URL}/accept-terms`, {
       method: 'POST',
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
       },
@@ -74,4 +73,52 @@ export const acceptTerms = async (token) => {
     console.error('ACCEPT TERMS ERROR:', err);
     throw err;
   }
+};
+
+export const requestPasswordReset = async (email) => {
+  const response = await fetch(`${API_URL}/request-password-reset`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to send reset code');
+  }
+  
+  return data;
+};
+
+export const verifyResetCode = async (email, code) => {
+  const response = await fetch(`${API_URL}/verify-reset-code`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, code }),
+  });
+  
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(data.message || 'Invalid code');
+  }
+  
+  return data;
+};
+
+export const resetPassword = async (email, code, newPassword) => {
+  const response = await fetch(`${API_URL}/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, code, newPassword }),
+  });
+  
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to reset password');
+  }
+  
+  return data;
 };

@@ -10,8 +10,10 @@ import {
 } from 'react-native';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthContext } from '../context/AuthContext';
 import { chatWithSantaAudio } from '../services/aiService';
+import * as localAudioService from '../services/localAudioService';
 
 // Constants for call timing
 const MAX_CALL_DURATION = 180; // 3 minutes in seconds
@@ -60,7 +62,7 @@ const useVoiceActivityDetection = (addLog) => {
   };
 
   const initializeVAD = async (recordingInstance, callbacks = {}) => {
-    logSafe('🔊 === INITIALIZING AUDIO-LEVEL VAD SYSTEM ===');
+    logSafe('🔊 === INITIALIZING TIME-BASED VAD SYSTEM ===');
 
     vadRef.current.recordingRef = recordingInstance;
     vadRef.current.onVoiceStart = callbacks.onVoiceStart;
@@ -80,77 +82,21 @@ const useVoiceActivityDetection = (addLog) => {
       audioLevel: 0,
     });
 
-    if (Platform.OS === 'ios') {
-  logSafe('🎤 Setting up iOS metering...');
-  
-  vadRef.current.meteringTimer = setInterval(async () => {
-    if (!vadRef.current.isActive || !vadRef.current.recordingRef) {
-      logSafe('⚠️ Metering stopped: VAD inactive or no recording');
-      return;
-    }
-
-    try {
-      const status = await vadRef.current.recordingRef.getStatusAsync();
-      
-      // Debug: Always log metering status
-      logSafe(`📊 Metering: ${status.metering !== undefined ? status.metering.toFixed(1) + ' dB' : 'UNDEFINED'}`);
-      
-      if (status.isRecording && status.metering !== undefined) {
-        const audioLevel = status.metering;
-        setVadState(prev => ({ ...prev, audioLevel }));
-
-        if (audioLevel > VAD_CONFIG.VOICE_THRESHOLD) {
-          vadRef.current.lastSoundTime = Date.now();
-          logSafe(`🔊 Voice detected! Last sound time updated`);
-          
-          if (!vadRef.current.hasDetectedVoice) {
-            logSafe('🗣️ FIRST VOICE DETECTED');
-            vadRef.current.hasDetectedVoice = true;
-            vadRef.current.onVoiceStart?.();
-          }
-        }
-      } else {
-        logSafe(`⚠️ Not recording or no metering: recording=${status.isRecording}, metering=${status.metering}`);
-      }
-    } catch (error) {
-      logSafe(`❌ Metering error: ${error.message}`);
-    }
-  }, VAD_CONFIG.METERING_INTERVAL);
-}
-
     startAudioLevelDetection();
     return true;
   };
 
   const startAudioLevelDetection = () => {
-    logSafe('🎤 === STARTING AUDIO LEVEL DETECTION ===');
-
-    vadRef.current.meteringTimer = setInterval(async () => {
-      if (!vadRef.current.isActive || !vadRef.current.recordingRef) {
-        return;
+    logSafe('🎤 === STARTING TIME-BASED DETECTION ===');
+    
+    // Assume voice activity starts after brief delay
+    setTimeout(() => {
+      if (vadRef.current.isActive && !vadRef.current.hasDetectedVoice) {
+        logSafe('🗣️ VOICE ACTIVITY ASSUMED');
+        vadRef.current.hasDetectedVoice = true;
+        vadRef.current.onVoiceStart?.();
       }
-
-      try {
-        const status = await vadRef.current.recordingRef.getStatusAsync();
-        
-        if (status.isRecording && status.metering !== undefined) {
-          const audioLevel = status.metering;
-          setVadState(prev => ({ ...prev, audioLevel }));
-
-          if (audioLevel > VAD_CONFIG.VOICE_THRESHOLD) {
-            vadRef.current.lastSoundTime = Date.now();
-            
-            if (!vadRef.current.hasDetectedVoice) {
-              logSafe('🗣️ VOICE DETECTED');
-              vadRef.current.hasDetectedVoice = true;
-              vadRef.current.onVoiceStart?.();
-            }
-          }
-        }
-      } catch (error) {
-        logSafe(`⚠️ Metering error: ${error.message}`);
-      }
-    }, VAD_CONFIG.METERING_INTERVAL);
+    }, 500);
 
     vadRef.current.durationTimer = setInterval(() => {
       if (!vadRef.current.isActive) {
@@ -160,29 +106,17 @@ const useVoiceActivityDetection = (addLog) => {
 
       const currentTime = Date.now();
       const duration = currentTime - vadRef.current.recordingStartTime;
-      const timeSinceLastSound = currentTime - (vadRef.current.lastSoundTime || vadRef.current.recordingStartTime);
 
       setVadState(prev => ({
         ...prev,
         recordingDuration: duration,
-        waitingForSilence: duration >= VAD_CONFIG.MIN_RECORDING_TIME && timeSinceLastSound > 1000,
+        waitingForSilence: duration >= VAD_CONFIG.MIN_RECORDING_TIME,
       }));
 
-      if (duration >= VAD_CONFIG.MIN_RECORDING_TIME) {
-        if (timeSinceLastSound >= VAD_CONFIG.SILENCE_DETECTION_TIME) {
-          logSafe(`✅ SILENCE DETECTED (${(timeSinceLastSound/1000).toFixed(1)}s quiet)`);
-          vadRef.current.onSilenceDetected?.();
-          stopVAD();
-        }
-      }
-
+      // Only stop at max recording time - no silence detection
       if (duration >= VAD_CONFIG.MAX_RECORDING_TIME) {
-        logSafe('⏰ MAX RECORDING TIME REACHED');
-        if (vadRef.current.hasDetectedVoice) {
-          vadRef.current.onSilenceDetected?.();
-        } else {
-          vadRef.current.onVoiceEnd?.();
-        }
+        logSafe(`⏰ RECORDING COMPLETE (${(duration/1000).toFixed(1)}s)`);
+        vadRef.current.onSilenceDetected?.();
         stopVAD();
       }
 
@@ -685,6 +619,22 @@ export default function SantaCallScreen({ route, navigation }) {
       setIsProcessing(false);
 
       if (response?.audioBase64) {
+        // Save recording to device with transcription
+        if (response.transcription && response.transcription.trim()) {
+          try {
+            await localAudioService.saveRecording(
+              audioUri,
+              child._id,
+              child.name,
+              response.transcription
+            );
+            addLog('✅ Recording saved to device');
+          } catch (saveError) {
+            addLog(`⚠️ Failed to save recording: ${saveError.message}`);
+          }
+        }
+
+        // Check if child said goodbye
         if (response.text && detectGoodbye(response.text)) {
           addLog('👋 Goodbye detected');
           await handleChildGoodbye();

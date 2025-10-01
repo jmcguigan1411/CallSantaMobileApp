@@ -1,6 +1,6 @@
-// models/User.js
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
 
 const userSchema = new mongoose.Schema(
   {
@@ -19,7 +19,6 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      // remove 'required' to allow social login users without a password
       minlength: 6,
     },
     role: {
@@ -40,11 +39,13 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    resetPasswordToken: String,
+    resetPasswordExpire: Date,
   },
   { timestamps: true }
 );
 
-// Hash password before saving, only if password exists
+// Hash password before saving
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password") || !this.password) {
     return next();
@@ -54,10 +55,26 @@ userSchema.pre("save", async function (next) {
   next();
 });
 
-// Compare passwords (will return false if password doesn't exist)
+// Compare passwords
 userSchema.methods.matchPassword = async function (enteredPassword) {
   if (!this.password) return false;
   return await bcrypt.compare(enteredPassword, this.password);
+};
+
+// Generate 6-digit password reset code
+userSchema.methods.getResetPasswordCode = function () {
+  // Generate random 6-digit code
+  const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+  
+  // Hash the code before storing
+  this.resetPasswordToken = crypto
+    .createHash('sha256')
+    .update(resetCode)
+    .digest('hex');
+  
+  this.resetPasswordExpire = Date.now() + 3600000; // 1 hour
+  
+  return resetCode; // Return unhashed code to send in email
 };
 
 const User = mongoose.model("User", userSchema);

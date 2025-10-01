@@ -45,17 +45,23 @@ export default function TermsModal({ visible, onAccept }) {
             • <Text style={styles.bold}>Authentication Data:</Text> Social login credentials (Google/Apple sign-in tokens)
           </Text>
 
-          <Text style={styles.subsectionTitle}>2.2 Audio Recordings</Text>
+          <Text style={styles.subsectionTitle}>2.2 Audio Recordings - Device Storage Only</Text>
           <Text style={styles.text}>
-            During "Santa calls," we collect and process:
+            During "Santa calls," audio recordings are processed as follows:
             {'\n\n'}
-            • <Text style={styles.bold}>Voice Recordings:</Text> Audio recordings of conversations between children and the AI-powered Santa character
+            • <Text style={styles.bold}>Temporary Processing:</Text> Audio is sent to our servers only for real-time transcription and AI response generation
             {'\n'}
-            • <Text style={styles.bold}>Transcriptions:</Text> Text transcriptions of spoken conversations
+            • <Text style={styles.bold}>Immediate Deletion:</Text> Audio files are immediately deleted from our servers after processing (typically within seconds)
             {'\n'}
-            • <Text style={styles.bold}>Storage:</Text> Audio files are stored on our secure servers and associated with your account
+            • <Text style={styles.bold}>Device Storage Only:</Text> Recordings are saved exclusively on your device - we never store them on our servers
             {'\n'}
-            • <Text style={styles.bold}>Retention:</Text> Recordings are retained until you delete them or close your account
+            • <Text style={styles.bold}>Your Control:</Text> You have complete control to delete recordings at any time
+            {'\n'}
+            • <Text style={styles.bold}>No Cloud Backup:</Text> We do not store, backup, or retain access to your audio files
+            {'\n'}
+            • <Text style={styles.bold}>No Cross-Device Sync:</Text> Recordings remain on the device where they were created
+            {'\n\n'}
+            <Text style={styles.bold}>Important:</Text> If you delete the app or clear app data, all recordings will be permanently lost as they are not backed up to our servers.
           </Text>
 
           <Text style={styles.subsectionTitle}>2.3 Usage Data</Text>
@@ -77,9 +83,9 @@ export default function TermsModal({ visible, onAccept }) {
             {'\n\n'}
             • <Text style={styles.bold}>Service Delivery:</Text> Providing AI-powered Santa conversations, generating responses, and creating voice audio
             {'\n'}
-            • <Text style={styles.bold}>Personalization:</Text> Customizing Santa's responses based on child profiles and conversation history
+            • <Text style={styles.bold}>Personalization:</Text> Customizing Santa's responses based on child profiles
             {'\n'}
-            • <Text style={styles.bold}>Wishlist Generation:</Text> Analyzing conversation transcripts to extract gift preferences
+            • <Text style={styles.bold}>Wishlist Generation:</Text> Analyzing conversation transcripts (stored on your device) to extract gift preferences
             {'\n'}
             • <Text style={styles.bold}>Account Management:</Text> Creating and maintaining user accounts, authentication, and password recovery
             {'\n'}
@@ -95,20 +101,20 @@ export default function TermsModal({ visible, onAccept }) {
 
           <Text style={styles.subsectionTitle}>4.1 OpenAI</Text>
           <Text style={styles.text}>
-            • <Text style={styles.bold}>Purpose:</Text> Speech-to-text transcription (Whisper API) and AI conversation generation (GPT-4)
+            • <Text style={styles.bold}>Purpose:</Text> Real-time speech-to-text transcription (Whisper API) and AI conversation generation (GPT-4)
             {'\n'}
-            • <Text style={styles.bold}>Data Shared:</Text> Audio recordings, transcriptions, child names and ages
+            • <Text style={styles.bold}>Data Shared:</Text> Audio recordings (temporarily), child names and ages
+            {'\n'}
+            • <Text style={styles.bold}>Data Retention:</Text> Audio is processed in real-time and not stored by us. OpenAI may retain data per their API policies
             {'\n'}
             • <Text style={styles.bold}>Privacy Policy:</Text> https://openai.com/privacy
-            {'\n'}
-            • <Text style={styles.bold}>Data Retention:</Text> Per OpenAI's API data usage policies
           </Text>
 
           <Text style={styles.subsectionTitle}>4.2 ElevenLabs</Text>
           <Text style={styles.text}>
             • <Text style={styles.bold}>Purpose:</Text> Text-to-speech voice generation for Santa's responses
             {'\n'}
-            • <Text style={styles.bold}>Data Shared:</Text> Generated text responses (does not include child audio)
+            • <Text style={styles.bold}>Data Shared:</Text> Generated text responses only (does not include child audio)
             {'\n'}
             • <Text style={styles.bold}>Privacy Policy:</Text> https://elevenlabs.io/privacy
           </Text>
@@ -128,6 +134,8 @@ export default function TermsModal({ visible, onAccept }) {
             {'\n'}
             • <Text style={styles.bold}>Limited Collection:</Text> We collect only information necessary to provide the service
             {'\n'}
+            • <Text style={styles.bold}>No Audio Storage:</Text> Children's audio recordings are never stored on our servers
+            {'\n'}
             • <Text style={styles.bold}>No Direct Marketing:</Text> We do not use children's information for marketing purposes
             {'\n'}
             • <Text style={styles.bold}>Parental Control:</Text> Parents can review, modify, or delete their children's information at any time
@@ -143,7 +151,9 @@ export default function TermsModal({ visible, onAccept }) {
             {'\n'}
             • <Text style={styles.bold}>Access Controls:</Text> Authentication required; role-based access to data
             {'\n'}
-            • <Text style={styles.bold}>Secure Storage:</Text> Audio files and database records stored on protected servers
+            • <Text style={styles.bold}>Minimal Server Storage:</Text> Audio files are never stored on our servers
+            {'\n'}
+            • <Text style={styles.bold}>Device Security:</Text> Recordings stored on your device are protected by your device's security features
             {'\n'}
             • <Text style={styles.bold}>Regular Updates:</Text> Software and security patches applied regularly
             {'\n\n'}
@@ -154,11 +164,13 @@ export default function TermsModal({ visible, onAccept }) {
           <Text style={styles.text}>
             You have the right to:
             {'\n\n'}
-            • <Text style={styles.bold}>Access:</Text> Request copies of your personal data and audio recordings
+            • <Text style={styles.bold}>Access:</Text> Request copies of your personal data
             {'\n'}
             • <Text style={styles.bold}>Correction:</Text> Update or correct inaccurate information
             {'\n'}
-            • <Text style={styles.bold}>Deletion:</Text> Request deletion of your account and all associated data (including audio recordings)
+            • <Text style={styles.bold}>Deletion:</Text> Request deletion of your account and all associated data
+            {'\n'}
+            • <Text style={styles.bold}>Device Recordings:</Text> Delete audio recordings directly from the app at any time
             {'\n'}
             • <Text style={styles.bold}>Data Portability:</Text> Receive your data in a portable format
             {'\n'}
@@ -171,13 +183,13 @@ export default function TermsModal({ visible, onAccept }) {
 
           <Text style={styles.sectionTitle}>8. Data Retention</Text>
           <Text style={styles.text}>
-            We retain your information for as long as your account is active or as needed to provide services. Specifically:
+            We retain your information as follows:
             {'\n\n'}
             • <Text style={styles.bold}>Account Data:</Text> Retained until account deletion
             {'\n'}
-            • <Text style={styles.bold}>Audio Recordings:</Text> Stored indefinitely until manually deleted or account closure
+            • <Text style={styles.bold}>Audio Recordings:</Text> Stored ONLY on your device; deleted when you delete the app or clear app data
             {'\n'}
-            • <Text style={styles.bold}>Transcriptions:</Text> Stored with audio recordings
+            • <Text style={styles.bold}>Audio Processing:</Text> Audio sent for transcription is immediately deleted from our servers after processing
             {'\n'}
             • <Text style={styles.bold}>Usage Logs:</Text> Retained for up to 90 days
             {'\n\n'}
@@ -216,6 +228,8 @@ export default function TermsModal({ visible, onAccept }) {
             {'\n'}
             • Maintain the security of your account credentials
             {'\n'}
+            • Understand that recordings are stored only on your device and may be lost if app is deleted
+            {'\n'}
             • Not attempt to hack, reverse engineer, or misuse the service
             {'\n'}
             • Not use the service for illegal, harmful, or fraudulent purposes
@@ -230,13 +244,15 @@ export default function TermsModal({ visible, onAccept }) {
             • Accuracy or reliability of AI-generated content
             {'\n'}
             • Compatibility with all devices or operating systems
+            {'\n'}
+            • Recovery of device-stored recordings if app is deleted
             {'\n\n'}
             We reserve the right to modify, suspend, or discontinue the service at any time without notice.
           </Text>
 
           <Text style={styles.subsectionTitle}>11.3 Limitation of Liability</Text>
           <Text style={styles.text}>
-            To the maximum extent permitted by law, we shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising from your use of the App.
+            To the maximum extent permitted by law, we shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising from your use of the App, including loss of device-stored recordings.
           </Text>
 
           <Text style={styles.sectionTitle}>12. Contact Information</Text>

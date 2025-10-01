@@ -5,7 +5,6 @@ const path = require("path");
 const fs = require("fs/promises");
 const fsSync = require("fs");
 const ChildProfile = require("../models/ChildProfile");
-const AudioRecording = require("../models/AudioRecording");
 const { getSantaPrompt } = require("../utils/santaPersona");
 
 const openai = new OpenAI({
@@ -22,57 +21,6 @@ async function saveAudioBuffer(buffer, ext = "mp3") {
   const filePath = path.join(tmpDir, filename);
   await fs.writeFile(filePath, buffer);
   return `/tmp/${filename}`; // express.static will serve this
-}
-
-// --- NEW: Save audio recording to database ---
-async function saveAudioRecording(childId, parentId, audioFilePath, transcription) {
-  try {
-    console.log(`🔍 saveAudioRecording called with:`, { childId, parentId, audioFilePath, transcriptionLength: transcription?.length });
-    
-    const child = await ChildProfile.findById(childId);
-    if (!child) {
-      console.log(`❌ Child not found: ${childId}`);
-      return null;
-    }
-
-    // Get next sequence number
-    const lastRecording = await AudioRecording.findOne({ child: childId })
-      .sort({ sequenceNumber: -1 });
-    const sequenceNumber = lastRecording ? lastRecording.sequenceNumber + 1 : 1;
-
-    // Get file info
-    const stats = await fs.stat(audioFilePath);
-    const filename = `${child.name.toLowerCase().replace(/\s+/g, '_')}_audio_${sequenceNumber}.m4a`;
-
-    // Create permanent storage directory
-    const permanentDir = path.join(__dirname, '..', 'audio-recordings');
-    if (!fsSync.existsSync(permanentDir)) {
-      fsSync.mkdirSync(permanentDir, { recursive: true });
-    }
-
-    // Copy file to permanent location
-    const permanentPath = path.join(permanentDir, filename);
-    await fs.copyFile(audioFilePath, permanentPath);
-
-    // Save to database
-    const recording = new AudioRecording({
-      child: childId,
-      parent: parentId,
-      filename,
-      sequenceNumber,
-      transcription,
-      fileSize: stats.size,
-      filePath: permanentPath
-    });
-
-    await recording.save();
-    console.log(`✅ Saved audio recording: ${filename}`);
-    
-    return recording;
-  } catch (error) {
-    console.error('❌ Error saving audio recording:', error);
-    return null;
-  }
 }
 
 // --- Generate Santa's voice with ElevenLabs (OPTIMIZED) ---
@@ -218,7 +166,7 @@ exports.chatWithSanta = async (req, res) => {
   }
 };
 
-// --- Audio chat controller for phone calls (OPTIMIZED + RECORDING SAVE) ---
+// --- Audio chat controller for phone calls (NO SERVER STORAGE) ---
 exports.chatWithSantaAudio = async (req, res) => {
   const { childId } = req.params;
   const { isGreeting, greetingText, childName } = req.body;
@@ -232,6 +180,7 @@ exports.chatWithSantaAudio = async (req, res) => {
     console.log(`Audio chat request for child: ${child.name} (${child.age}y)`);
 
     let santaResponse;
+    let transcription = null;
 
     if (isGreeting === 'true' || isGreeting === true) {
       santaResponse = greetingText || `Ho ho ho! Hello ${childName || child.name}! What would you like for Christmas?`;
@@ -248,24 +197,15 @@ exports.chatWithSantaAudio = async (req, res) => {
       try {
         // Transcribe audio using Whisper
         const userMessage = await transcribeAudio(audioFile.path);
-        
-        // DEBUG LOGGING
-        console.log(`🔍 DEBUG: About to save recording`);
-        console.log(`🔍 childId: ${childId}`);
-        console.log(`🔍 parentId: ${req.user._id}`);
-        console.log(`🔍 audioFilePath: ${audioFile.path}`);
-        console.log(`🔍 transcription: "${userMessage}"`);
-        
-        // SAVE AUDIO RECORDING WITH TRANSCRIPTION
-        const savedRecording = await saveAudioRecording(childId, req.user._id, audioFile.path, userMessage);
-        console.log(`🔍 Recording saved result:`, savedRecording ? 'SUCCESS' : 'FAILED');
+        transcription = userMessage;
         
         if (!userMessage.trim()) {
           await fs.unlink(audioFile.path).catch(console.error);
           const audioBase64 = await generateSantaVoice("I didn't catch that. Tell me again?");
           return res.json({
             text: "I didn't quite catch that. Can you tell me again?",
-            audioBase64
+            audioBase64,
+            transcription: ""
           });
         }
 
@@ -275,7 +215,7 @@ exports.chatWithSantaAudio = async (req, res) => {
         console.log(`User said: "${userMessage}"`);
         console.log(`Santa responds: "${santaResponse}"`);
 
-        // Clean up uploaded audio file from tmp
+        // Clean up uploaded audio file from tmp (no permanent storage)
         await fs.unlink(audioFile.path).catch(console.error);
       } catch (transcriptionError) {
         console.error("Audio processing error:", transcriptionError);
@@ -285,7 +225,8 @@ exports.chatWithSantaAudio = async (req, res) => {
         const fallbackAudio = await generateSantaVoice(fallbackText);
         return res.json({
           text: fallbackText,
-          audioBase64: fallbackAudio
+          audioBase64: fallbackAudio,
+          transcription: ""
         });
       }
     }
@@ -297,13 +238,15 @@ exports.chatWithSantaAudio = async (req, res) => {
       return res.json({
         text: santaResponse,
         audioBase64: null,
+        transcription: transcription || "",
         ttsUnavailable: true
       });
     }
 
     res.json({
       text: santaResponse,
-      audioBase64: audioBase64
+      audioBase64: audioBase64,
+      transcription: transcription || ""
     });
 
   } catch (error) {
@@ -319,7 +262,49 @@ exports.chatWithSantaAudio = async (req, res) => {
     res.status(500).json({
       text: fallbackText,
       audioBase64: fallbackAudio,
+      transcription: "",
       error: error.message
     });
+  }
+};
+
+// --- Extract wishlist from local device transcriptions ---
+exports.extractWishlistLocal = async (req, res) => {
+  try {
+    const { childName, transcriptions, recordingsCount } = req.body;
+    
+    if (!transcriptions || transcriptions.trim().length === 0) {
+      return res.json({ wishlist: [], recordingsAnalyzed: 0 });
+    }
+    
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You are analyzing conversations between a child and Santa Claus. Extract all gift wishes, toys, activities, or things the child mentioned wanting for Christmas. Return a JSON object with a "wishlist" array. Each item should be a string describing what the child wants. Only include actual wishes, not general conversation.`
+        },
+        {
+          role: "user",
+          content: `Child's name: ${childName}\n\nTranscriptions:\n${transcriptions}\n\nExtract the wishlist as a JSON object with a "wishlist" array.`
+        }
+      ],
+      max_tokens: 500,
+      temperature: 0.3,
+      response_format: { type: "json_object" }
+    });
+
+    const result = JSON.parse(completion.choices[0].message.content);
+    const wishlist = result.wishlist || result.items || [];
+
+    res.json({ 
+      wishlist,
+      recordingsAnalyzed: recordingsCount,
+      childName
+    });
+
+  } catch (error) {
+    console.error('Error extracting wishlist:', error);
+    res.status(500).json({ message: 'Failed to extract wishlist', error: error.message });
   }
 };

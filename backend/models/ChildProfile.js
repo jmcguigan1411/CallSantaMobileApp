@@ -1,14 +1,50 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
-const ChildProfileSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  age: { type: Number, required: true },
-  gender: { type: String, required: false },
-  phoneticSpelling: { type: String, required: false },
-  pronunciationSamples: { type: [String], default: [] },
-  wishlist: [String],
-  parent: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-}, { timestamps: true });
+const childProfileSchema = new mongoose.Schema(
+  {
+    parent: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    name: {
+      type: String,
+      required: true,
+    },
+    age: {
+      type: Number,
+      required: true,
+    },
+    gender: {
+      type: String,
+      enum: ["male", "female"],
+      required: true,
+    },
+    phoneticSpelling: {
+      type: String,
+      default: "",
+    },
+    pronunciationSamples: [
+      {
+        url: String,
+        uploadedAt: { type: Date, default: Date.now },
+      },
+    ],
+    wishlist: [String],
+    hasBehavioralNotes: {
+      type: Boolean,
+      default: false,
+    },
+    goodBehavior: {
+      type: String,
+      default: "",
+    },
+    badBehavior: {
+      type: String,
+      default: "",
+    },
+  },
+  { timestamps: true }
+);
 
-// Prevent model overwrite errors in watch mode
-module.exports = mongoose.models.ChildProfile || mongoose.model('ChildProfile', ChildProfileSchema);
+module.exports = mongoose.model("ChildProfile", childProfileSchema);

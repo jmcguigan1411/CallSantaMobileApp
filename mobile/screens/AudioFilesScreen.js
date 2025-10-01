@@ -2,121 +2,112 @@ import React, { useState, useEffect, useContext } from 'react';
 import {
   View,
   Text,
+  StyleSheet,
   FlatList,
   TouchableOpacity,
-  StyleSheet,
   Alert,
   ActivityIndicator,
-  ScrollView,
+  Platform,
 } from 'react-native';
+import { Audio } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../context/AuthContext';
-import * as audioService from '../services/audioService';
 import * as childService from '../services/childService';
+import * as localAudioService from '../services/localAudioService';
 import Snowflakes from '../components/Snowflakes';
-import { LinearGradient } from 'expo-linear-gradient';
 
 export default function AudioFilesScreen({ navigation }) {
   const { token } = useContext(AuthContext);
   const [children, setChildren] = useState([]);
   const [selectedChild, setSelectedChild] = useState(null);
   const [recordings, setRecordings] = useState([]);
-  const [wishlist, setWishlist] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [extractingWishlist, setExtractingWishlist] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [playingId, setPlayingId] = useState(null);
+  const [sound, setSound] = useState(null);
 
   useEffect(() => {
-    fetchChildren();
-    
-    const unsubscribe = navigation.addListener('focus', () => {
-      fetchChildren();
-    });
-    
-    return unsubscribe;
-  }, [navigation]);
+    loadChildren();
+    return () => {
+      if (sound) {
+        sound.unloadAsync();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (selectedChild) {
-      console.log('📼 Child selected:', selectedChild.name, selectedChild._id);
-      console.log('📼 Child wishlist:', selectedChild.wishlist);
-      
-      // Load saved wishlist with duplicate markers
-      if (selectedChild.wishlist && selectedChild.wishlist.length > 0) {
-        const wishlistWithDuplicates = markDuplicates(selectedChild.wishlist);
-        setWishlist(wishlistWithDuplicates);
-      } else {
-        setWishlist([]);
-      }
-      
-      fetchRecordings(selectedChild._id);
+      loadRecordings(selectedChild._id);
     }
   }, [selectedChild]);
 
-  // Mark duplicate items
-  const markDuplicates = (items) => {
-    const itemCounts = {};
-    const seenItems = {};
-    
-    // Count occurrences (case-insensitive)
-    items.forEach(item => {
-      const normalized = item.toLowerCase().trim();
-      itemCounts[normalized] = (itemCounts[normalized] || 0) + 1;
-    });
-    
-    // Mark duplicates
-    return items.map(item => {
-      const normalized = item.toLowerCase().trim();
-      if (itemCounts[normalized] > 1) {
-        if (!seenItems[normalized]) {
-          seenItems[normalized] = true;
-          return item; // First occurrence - no marker
-        }
-        return `${item} (duplicate)`;
-      }
-      return item;
-    });
-  };
-
-  const fetchChildren = async () => {
+  const loadChildren = async () => {
     try {
       setLoading(true);
       const data = await childService.getChildren();
-      setChildren(data || []);
-      if (data && data.length > 0) {
+      setChildren(data);
+      if (data.length > 0) {
         setSelectedChild(data[0]);
       }
     } catch (error) {
-      console.error('Failed to fetch children:', error);
       Alert.alert('Error', 'Failed to load children');
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchRecordings = async (childId) => {
+  const loadRecordings = async (childId) => {
     try {
       setLoading(true);
-      console.log('📼 Fetching recordings for child:', childId);
-      
-      const data = await audioService.getChildAudioRecordings(childId, token);
-      
-      console.log('📼 Received recordings:', data);
-      console.log('📼 Number of recordings:', data?.length || 0);
-      
-      setRecordings(data || []);
+      const data = await localAudioService.getRecordingsForChild(childId);
+      // Sort by date, newest first
+      const sortedData = data.sort((a, b) => new Date(b.date) - new Date(a.date));
+      setRecordings(sortedData);
     } catch (error) {
-      console.error('Failed to fetch recordings:', error);
       Alert.alert('Error', 'Failed to load recordings');
-      setRecordings([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDeleteRecording = (recordingId, filename) => {
+  const playRecording = async (recording) => {
+    try {
+      // Stop any currently playing sound
+      if (sound) {
+        await sound.unloadAsync();
+        setSound(null);
+        setPlayingId(null);
+      }
+
+      // If clicking the same recording that was playing, just stop
+      if (playingId === recording.id) {
+        return;
+      }
+
+      // Play the new recording
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: recording.uri },
+        { shouldPlay: true }
+      );
+
+      setSound(newSound);
+      setPlayingId(recording.id);
+
+      newSound.setOnPlaybackStatusUpdate((status) => {
+        if (status.didJustFinish) {
+          setPlayingId(null);
+          setSound(null);
+        }
+      });
+    } catch (error) {
+      Alert.alert('Error', 'Failed to play recording');
+      console.error('Playback error:', error);
+    }
+  };
+
+  const deleteRecording = async (recording) => {
     Alert.alert(
       'Delete Recording',
-      `Are you sure you want to delete ${filename}?`,
+      'Are you sure you want to delete this recording?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -124,11 +115,16 @@ export default function AudioFilesScreen({ navigation }) {
           style: 'destructive',
           onPress: async () => {
             try {
-              await audioService.deleteAudioRecording(recordingId, token);
-              fetchRecordings(selectedChild._id);
+              if (playingId === recording.id && sound) {
+                await sound.unloadAsync();
+                setSound(null);
+                setPlayingId(null);
+              }
+
+              await localAudioService.deleteRecording(selectedChild._id, recording.id);
+              await loadRecordings(selectedChild._id);
               Alert.alert('Success', 'Recording deleted');
             } catch (error) {
-              console.error('Failed to delete recording:', error);
               Alert.alert('Error', 'Failed to delete recording');
             }
           },
@@ -137,93 +133,105 @@ export default function AudioFilesScreen({ navigation }) {
     );
   };
 
-  const handleExtractWishlist = async () => {
-    if (!selectedChild) return;
-
-    try {
-      setExtractingWishlist(true);
-      const data = await audioService.extractWishlist(selectedChild._id, token);
-      
-      // Mark duplicates in the new wishlist
-      const wishlistWithDuplicates = markDuplicates(data.wishlist || []);
-      setWishlist(wishlistWithDuplicates);
-      
-      // Update the selected child's wishlist in state
-      setSelectedChild(prev => ({
-        ...prev,
-        wishlist: data.wishlist || []
-      }));
-      
-      if (data.wishlist.length === 0) {
-        Alert.alert('No Wishlist Items', 'No specific gift requests were found in the recordings.');
-      } else {
-        Alert.alert(
-          'Wishlist Extracted!',
-          `Found ${data.wishlist.length} item(s) from ${data.recordingsAnalyzed} recording(s).`
-        );
-      }
-    } catch (error) {
-      console.error('Failed to extract wishlist:', error);
-      Alert.alert('Error', 'Failed to extract wishlist. Make sure there are recordings available.');
-    } finally {
-      setExtractingWishlist(false);
+  const extractWishlist = async () => {
+    if (!selectedChild || recordings.length === 0) {
+      Alert.alert('Info', 'No recordings available to analyze');
+      return;
     }
-  };
 
-  const formatFileSize = (bytes) => {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    Alert.alert(
+      'Extract Wishlist',
+      `Analyze ${recordings.length} recording(s) to extract ${selectedChild.name}'s wishlist?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Analyze',
+          onPress: async () => {
+            try {
+              setLoading(true);
+              const result = await localAudioService.extractWishlistLocal(
+                selectedChild._id,
+                selectedChild.name,
+                token
+              );
+
+              if (result.wishlist && result.wishlist.length > 0) {
+                // Update child's wishlist
+                await childService.updateChild(selectedChild._id, {
+                  wishlist: result.wishlist,
+                });
+
+                Alert.alert(
+                  'Wishlist Updated',
+                  `Found ${result.wishlist.length} items:\n\n${result.wishlist.join('\n')}`,
+                  [{ text: 'OK', onPress: () => navigation.navigate('ParentDashboard') }]
+                );
+              } else {
+                Alert.alert('No Items Found', 'Could not extract any wishlist items from the recordings.');
+              }
+            } catch (error) {
+              Alert.alert('Error', 'Failed to extract wishlist');
+              console.error('Wishlist extraction error:', error);
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const renderRecording = ({ item }) => (
-    <LinearGradient
-      colors={['#d46f34ff', '#dd9b8bff']}
-      style={styles.recordingCard}
-    >
-      <View style={styles.recordingHeader}>
-        <View style={styles.recordingInfo}>
-          <Text style={styles.recordingFilename}>{item.filename}</Text>
-          <Text style={styles.recordingMeta}>
-            Recording #{item.sequenceNumber} • {formatFileSize(item.fileSize)}
-          </Text>
-          <Text style={styles.recordingDate}>{formatDate(item.createdAt)}</Text>
+  const renderRecording = ({ item }) => {
+    const isPlaying = playingId === item.id;
+
+    return (
+      <View style={styles.recordingCard}>
+        <View style={styles.recordingHeader}>
+          <View style={styles.recordingInfo}>
+            <Text style={styles.recordingNumber}>Recording #{item.sequenceNumber}</Text>
+            <Text style={styles.recordingDate}>{formatDate(item.date)}</Text>
+          </View>
+          <View style={styles.recordingActions}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.playButton]}
+              onPress={() => playRecording(item)}
+            >
+              <Ionicons 
+                name={isPlaying ? 'stop' : 'play'} 
+                size={24} 
+                color="#fff" 
+              />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.deleteButton]}
+              onPress={() => deleteRecording(item)}
+            >
+              <Ionicons name="trash" size={24} color="#fff" />
+            </TouchableOpacity>
+          </View>
         </View>
-        <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={() => handleDeleteRecording(item._id, item.filename)}
-        >
-          <Ionicons name="trash" size={20} color="#fff" />
-        </TouchableOpacity>
+
+        {item.transcription && (
+          <View style={styles.transcriptionContainer}>
+            <Text style={styles.transcriptionLabel}>Transcription:</Text>
+            <Text style={styles.transcriptionText}>{item.transcription}</Text>
+          </View>
+        )}
       </View>
-
-      {item.transcription && (
-        <View style={styles.transcriptionContainer}>
-          <Text style={styles.transcriptionLabel}>Transcription:</Text>
-          <Text style={styles.transcriptionText}>{item.transcription}</Text>
-        </View>
-      )}
-    </LinearGradient>
-  );
-
-  const renderWishlistItem = ({ item, index }) => (
-    <View style={styles.wishlistItem}>
-      <Ionicons name="gift" size={20} color="#FFD700" />
-      <Text style={styles.wishlistText}>
-        {index + 1}. {item}
-      </Text>
-    </View>
-  );
+    );
+  };
 
   if (loading && children.length === 0) {
     return (
       <View style={styles.loadingContainer}>
+        <Snowflakes />
         <ActivityIndicator size="large" color="#fff" />
+        <Text style={styles.loadingText}>Loading...</Text>
       </View>
     );
   }
@@ -232,92 +240,86 @@ export default function AudioFilesScreen({ navigation }) {
     <View style={styles.container}>
       <Snowflakes />
 
-      <View style={styles.childSelector}>
-        <Text style={styles.selectorLabel}>Select Child:</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {children.map((child) => (
-            <TouchableOpacity
-              key={child._id}
-              style={[
-                styles.childButton,
-                selectedChild?._id === child._id && styles.childButtonSelected,
-              ]}
-              onPress={() => setSelectedChild(child)}
-            >
-              <Text
-                style={[
-                  styles.childButtonText,
-                  selectedChild?._id === child._id && styles.childButtonTextSelected,
-                ]}
-              >
-                {child.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
-      {recordings.length > 0 && (
-        <TouchableOpacity
-          style={styles.extractButton}
-          onPress={handleExtractWishlist}
-          disabled={extractingWishlist}
-        >
-          {extractingWishlist ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <>
-              <Ionicons name="sparkles" size={20} color="#fff" />
-              <Text style={styles.extractButtonText}>
-                {wishlist.length > 0 ? 'Re-extract Wishlist' : 'Extract Wishlist'}
-              </Text>
-            </>
-          )}
-        </TouchableOpacity>
-      )}
-
-      {wishlist.length > 0 && (
-  <View style={styles.wishlistContainer}>
-    <Text style={styles.wishlistTitle}>
-      🎁 {selectedChild?.name}'s Wishlist
-    </Text>
-    <ScrollView 
-      style={styles.wishlistScrollView}
-      showsVerticalScrollIndicator={true}
-      nestedScrollEnabled={true}
-    >
-      {wishlist.map((item, index) => (
-        <View key={index} style={styles.wishlistItem}>
-          <Ionicons name="gift" size={20} color="#FFD700" />
-          <Text style={styles.wishlistText}>
-            {index + 1}. {item}
-          </Text>
-        </View>
-      ))}
-    </ScrollView>
-  </View>
-)}
-      <Text style={styles.sectionTitle}>
-        📼 Audio Recordings ({recordings.length})
-      </Text>
-
-      {recordings.length === 0 ? (
+      {children.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Ionicons name="mic-off" size={60} color="#fff" />
-          <Text style={styles.emptyText}>
-            No recordings yet for {selectedChild?.name}
-          </Text>
-          <Text style={styles.emptySubtext}>
-            Recordings will appear here after calls with Santa
-          </Text>
+          <Ionicons name="musical-notes-outline" size={80} color="#ddd" />
+          <Text style={styles.emptyText}>No children profiles yet</Text>
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => navigation.navigate('ChildProfile')}
+          >
+            <Text style={styles.addButtonText}>Add a Child</Text>
+          </TouchableOpacity>
         </View>
       ) : (
-        <FlatList
-          data={recordings}
-          keyExtractor={(item) => item._id}
-          renderItem={renderRecording}
-          contentContainerStyle={styles.listContainer}
-        />
+        <>
+          {/* Child Selector */}
+          <View style={styles.selectorContainer}>
+            <Text style={styles.selectorLabel}>Select Child:</Text>
+            <View style={styles.childButtons}>
+              {children.map((child) => (
+                <TouchableOpacity
+                  key={child._id}
+                  style={[
+                    styles.childButton,
+                    selectedChild?._id === child._id && styles.childButtonActive,
+                  ]}
+                  onPress={() => setSelectedChild(child)}
+                >
+                  <Text
+                    style={[
+                      styles.childButtonText,
+                      selectedChild?._id === child._id && styles.childButtonTextActive,
+                    ]}
+                  >
+                    {child.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* Recordings List */}
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#fff" />
+            </View>
+          ) : recordings.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="mic-off-outline" size={80} color="#ddd" />
+              <Text style={styles.emptyText}>
+                No recordings for {selectedChild?.name} yet
+              </Text>
+              <Text style={styles.emptySubtext}>
+                Make a Santa call to create recordings
+              </Text>
+            </View>
+          ) : (
+            <>
+              <View style={styles.statsContainer}>
+                <Text style={styles.statsText}>
+                  {recordings.length} recording{recordings.length !== 1 ? 's' : ''} saved on device
+                </Text>
+                <TouchableOpacity
+                  style={styles.extractButton}
+                  onPress={extractWishlist}
+                  disabled={loading}
+                >
+                  <Ionicons name="sparkles" size={20} color="#fff" />
+                  <Text style={styles.extractButtonText}>Extract Wishlist</Text>
+                </TouchableOpacity>
+              </View>
+
+              <FlatList
+                data={recordings}
+                renderItem={renderRecording}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={styles.listContainer}
+                showsVerticalScrollIndicator={false}
+              />
+            </>
+          )}
+        </>
       )}
     </View>
   );
@@ -326,17 +328,52 @@ export default function AudioFilesScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#af1f1fff',
+    backgroundColor: '#b71c1c',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#af1f1fff',
   },
-  childSelector: {
-    padding: 15,
-    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+  loadingText: {
+    color: '#fff',
+    fontSize: 18,
+    marginTop: 20,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  emptyText: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 20,
+    textAlign: 'center',
+  },
+  emptySubtext: {
+    color: '#ddd',
+    fontSize: 16,
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  addButton: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 30,
+    paddingVertical: 15,
+    borderRadius: 8,
+    marginTop: 30,
+  },
+  addButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  selectorContainer: {
+    padding: 20,
+    backgroundColor: '#a71c1c',
   },
   selectorLabel: {
     color: '#fff',
@@ -344,158 +381,127 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 10,
   },
+  childButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
   childButton: {
+    backgroundColor: '#f44336',
     paddingHorizontal: 20,
     paddingVertical: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     borderRadius: 20,
-    marginRight: 10,
     borderWidth: 2,
     borderColor: 'transparent',
   },
-  childButtonSelected: {
+  childButtonActive: {
     backgroundColor: '#4CAF50',
     borderColor: '#FFD700',
   },
   childButtonText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
   },
-  childButtonTextSelected: {
+  childButtonTextActive: {
     fontWeight: 'bold',
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#a71c1c',
+  },
+  statsText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   extractButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#9C27B0',
-    marginHorizontal: 20,
-    marginVertical: 10,
-    paddingVertical: 12,
-    borderRadius: 10,
-    gap: 10,
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 5,
   },
   extractButtonText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  wishlistContainer: {
-    backgroundColor: 'rgba(255, 215, 0, 0.2)',
-    marginHorizontal: 20,
-    marginBottom: 15,
-    padding: 15,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: '#FFD700',
-  },
-  wishlistTitle: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
-  wishlistScrollView: {
-  maxHeight: 200,
-  paddingVertical: 5,
-},
-  wishlistItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 5,
-    gap: 10,
-  },
-  wishlistText: {
-    color: '#fff',
     fontSize: 14,
-    flex: 1,
-  },
-  sectionTitle: {
-    color: '#fff',
-    fontSize: 20,
     fontWeight: 'bold',
-    marginHorizontal: 20,
-    marginVertical: 10,
   },
   listContainer: {
     padding: 20,
-    paddingTop: 10,
   },
   recordingCard: {
+    backgroundColor: '#fff',
     borderRadius: 12,
     padding: 15,
     marginBottom: 15,
+    elevation: 3,
     shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
   recordingHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    marginBottom: 10,
   },
   recordingInfo: {
     flex: 1,
   },
-  recordingFilename: {
-    color: '#fff',
+  recordingNumber: {
     fontSize: 16,
     fontWeight: 'bold',
-    marginBottom: 5,
-  },
-  recordingMeta: {
-    color: '#fff',
-    fontSize: 12,
-    opacity: 0.9,
+    color: '#333',
+    marginBottom: 4,
   },
   recordingDate: {
-    color: '#fff',
-    fontSize: 11,
-    opacity: 0.8,
-    marginTop: 3,
+    fontSize: 12,
+    color: '#666',
+  },
+  recordingActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  actionButton: {
+    width: 45,
+    height: 45,
+    borderRadius: 22.5,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+  },
+  playButton: {
+    backgroundColor: '#4CAF50',
   },
   deleteButton: {
-    backgroundColor: '#FF5252',
-    padding: 10,
-    borderRadius: 8,
+    backgroundColor: '#f44336',
   },
   transcriptionContainer: {
-    marginTop: 15,
-    paddingTop: 15,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: '#f5f5f5',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 5,
   },
   transcriptionLabel: {
-    color: '#fff',
     fontSize: 12,
     fontWeight: 'bold',
+    color: '#666',
     marginBottom: 5,
   },
   transcriptionText: {
-    color: '#fff',
     fontSize: 14,
+    color: '#333',
     lineHeight: 20,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
-  },
-  emptyText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginTop: 20,
-    textAlign: 'center',
-  },
-  emptySubtext: {
-    color: '#fff',
-    fontSize: 14,
-    marginTop: 10,
-    textAlign: 'center',
-    opacity: 0.8,
   },
 });
