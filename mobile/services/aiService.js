@@ -1,5 +1,5 @@
 // services/aiService.js - Complete file with token debugging
-import { API_BASE_URL } from '../config';
+const API_BASE = 'https://callsantamobile-devicestorage.onrender.com/api';
 
 // Function to handle Santa audio chat
 export const chatWithSantaAudio = async (childId, audioUri, token, options = {}) => {
@@ -58,6 +58,7 @@ export const chatWithSantaAudio = async (childId, audioUri, token, options = {})
       }
       console.log('[AI Service] Sending greeting request');
     } else if (audioUri) {
+      // Add audio file for regular chat
       formData.append('audio', {
         uri: audioUri,
         type: 'audio/m4a',
@@ -66,8 +67,10 @@ export const chatWithSantaAudio = async (childId, audioUri, token, options = {})
       console.log('[AI Service] Sending audio file');
     }
 
-    // Use API_BASE_URL from config
-    const response = await fetch(`${API_BASE_URL}/ai/chat-audio/${childId}`, {
+    console.log('[AI Service] Making request to:', `${API_BASE}/ai/chat-audio/${childId}`);
+    console.log('[AI Service] Authorization header:', token ? 'Bearer [TOKEN_PROVIDED]' : 'NO_AUTHORIZATION_HEADER');
+
+    const response = await fetch(`${API_BASE}/ai/chat-audio/${childId}`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -89,10 +92,11 @@ export const chatWithSantaAudio = async (childId, audioUri, token, options = {})
       try {
         errorData = JSON.parse(errorText);
         console.error('[AI Service] Parsed error data:', errorData);
+        
         if (response.status === 401) {
           console.error('[AI Service] 🔐 Authentication failed - likely expired or invalid token');
         }
-      } catch {
+      } catch (parseError) {
         console.error('[AI Service] Error response is not JSON, raw text:', errorText);
       }
       
@@ -129,7 +133,7 @@ export const chatWithSantaAudioJSON = async (childId, audioUri, token, options =
       body.audioBase64 = base64Audio;
     }
 
-    const response = await fetch(`${API_BASE_URL}/ai/chat-audio/${childId}`, {
+    const response = await fetch(`${API_BASE}/ai/chat-audio/${childId}`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,

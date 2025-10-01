@@ -1,6 +1,7 @@
-// services/childrenService.js
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL } from '../config';
+
+const API_BASE = 'https://callsantamobile-devicestorage.onrender.com/api';
+const API_URL = `${API_BASE}/children`;
 
 // Helper to get auth token
 const getToken = async () => {
@@ -13,9 +14,9 @@ const getToken = async () => {
 export const getChildren = async () => {
   try {
     const token = await getToken();
-    console.log('[DEBUG] GET CHILDREN URL:', `${API_BASE_URL}/children`);
+    console.log('[DEBUG] GET CHILDREN URL:', API_URL);
 
-    const res = await fetch(`${API_BASE_URL}/children`, {
+    const res = await fetch(`${API_URL}`, {
       headers: { Authorization: `Bearer ${token}` }
     });
 
@@ -41,9 +42,9 @@ export const getChildren = async () => {
 export const getChild = async (childId) => {
   try {
     const token = await getToken();
-    console.log('[DEBUG] GET CHILD URL:', `${API_BASE_URL}/children/${childId}`);
+    console.log('[DEBUG] GET CHILD URL:', `${API_URL}/${childId}`);
 
-    const res = await fetch(`${API_BASE_URL}/children/${childId}`, {
+    const res = await fetch(`${API_URL}/${childId}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
 
@@ -68,9 +69,9 @@ export const getChild = async (childId) => {
 export const addChild = async (childData) => {
   try {
     const token = await getToken();
-    console.log('[DEBUG] ADD CHILD URL:', `${API_BASE_URL}/children`, 'BODY:', childData);
+    console.log('[DEBUG] ADD CHILD URL:', API_URL, 'BODY:', childData);
 
-    const res = await fetch(`${API_BASE_URL}/children`, {
+    const res = await fetch(`${API_URL}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -100,9 +101,9 @@ export const addChild = async (childData) => {
 export const updateChild = async (childId, childData) => {
   try {
     const token = await getToken();
-    console.log('[DEBUG] UPDATE CHILD URL:', `${API_BASE_URL}/children/${childId}`, 'BODY:', childData);
+    console.log('[DEBUG] UPDATE CHILD URL:', `${API_URL}/${childId}`, 'BODY:', childData);
 
-    const res = await fetch(`${API_BASE_URL}/children/${childId}`, {
+    const res = await fetch(`${API_URL}/${childId}`, {
       method: 'PUT',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -132,9 +133,9 @@ export const updateChild = async (childId, childData) => {
 export const deleteChild = async (childId) => {
   try {
     const token = await getToken();
-    console.log('[DEBUG] DELETE CHILD URL:', `${API_BASE_URL}/children/${childId}`);
+    console.log('[DEBUG] DELETE CHILD URL:', `${API_URL}/${childId}`);
 
-    const res = await fetch(`${API_BASE_URL}/children/${childId}`, {
+    const res = await fetch(`${API_URL}/${childId}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     });

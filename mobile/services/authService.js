@@ -1,9 +1,9 @@
-// services/authService.js
-import { API_BASE_URL } from '../config';
+const API_BASE = 'https://callsantamobile-devicestorage.onrender.com/api';
+const API_URL = `${API_BASE}/auth`;
 
 export const login = async (email, password) => {
   try {
-    const res = await fetch(`${API_BASE_URL}/auth/login`, {
+    const res = await fetch(`${API_URL}/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
@@ -21,7 +21,7 @@ export const login = async (email, password) => {
 
 export const register = async (name, email, password) => {
   try {
-    const res = await fetch(`${API_BASE_URL}/auth/register`, {
+    const res = await fetch(`${API_URL}/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, email, password }),
@@ -39,7 +39,7 @@ export const register = async (name, email, password) => {
 
 export const socialLogin = async (provider, token, name, email) => {
   try {
-    const res = await fetch(`${API_BASE_URL}/auth/social-login`, {
+    const res = await fetch(`${API_URL}/social-login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ provider, token, name, email }),
@@ -48,7 +48,8 @@ export const socialLogin = async (provider, token, name, email) => {
       const errData = await res.json();
       throw new Error(errData.message || 'Social login failed');
     }
-    return await res.json();
+    const data = await res.json();
+    return data;
   } catch (err) {
     console.error('SOCIAL LOGIN ERROR:', err);
     throw err;
@@ -57,7 +58,7 @@ export const socialLogin = async (provider, token, name, email) => {
 
 export const acceptTerms = async (token) => {
   try {
-    const res = await fetch(`${API_BASE_URL}/auth/accept-terms`, {
+    const res = await fetch(`${API_URL}/accept-terms`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -76,43 +77,49 @@ export const acceptTerms = async (token) => {
 };
 
 export const requestPasswordReset = async (email) => {
-  const res = await fetch(`${API_BASE_URL}/auth/request-password-reset`, {
+  const response = await fetch(`${API_URL}/request-password-reset`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email }),
   });
-
-  const data = await res.json();
-  if (!res.ok) {
+ 
+  const data = await response.json();
+ 
+  if (!response.ok) {
     throw new Error(data.message || 'Failed to send reset code');
   }
+ 
   return data;
 };
 
 export const verifyResetCode = async (email, code) => {
-  const res = await fetch(`${API_BASE_URL}/auth/verify-reset-code`, {
+  const response = await fetch(`${API_URL}/verify-reset-code`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, code }),
   });
-
-  const data = await res.json();
-  if (!res.ok) {
+ 
+  const data = await response.json();
+ 
+  if (!response.ok) {
     throw new Error(data.message || 'Invalid code');
   }
+ 
   return data;
 };
 
 export const resetPassword = async (email, code, newPassword) => {
-  const res = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+  const response = await fetch(`${API_URL}/reset-password`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, code, newPassword }),
   });
-
-  const data = await res.json();
-  if (!res.ok) {
+ 
+  const data = await response.json();
+ 
+  if (!response.ok) {
     throw new Error(data.message || 'Failed to reset password');
   }
+ 
   return data;
 };

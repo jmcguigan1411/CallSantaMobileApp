@@ -1,21 +1,18 @@
-// services/audioService.js
-import { API_BASE_URL } from '../config';
+const API_BASE = 'https://callsantamobile-devicestorage.onrender.com/api';
 
 // Get all audio recordings for a child
 export const getChildAudioRecordings = async (childId, token) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/ai/chat-audio/${childId}`, {
+    const response = await fetch(`${API_BASE}/audio/child/${childId}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
-
     if (!response.ok) {
       throw new Error('Failed to fetch audio recordings');
     }
-
     return await response.json();
   } catch (error) {
     console.error('getChildAudioRecordings error:', error);
@@ -26,18 +23,16 @@ export const getChildAudioRecordings = async (childId, token) => {
 // Delete an audio recording
 export const deleteAudioRecording = async (recordingId, token) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/audio/${recordingId}`, {
+    const response = await fetch(`${API_BASE}/audio/${recordingId}`, {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
-
     if (!response.ok) {
       throw new Error('Failed to delete audio recording');
     }
-
     return await response.json();
   } catch (error) {
     console.error('deleteAudioRecording error:', error);
@@ -47,24 +42,22 @@ export const deleteAudioRecording = async (recordingId, token) => {
 
 // Get download URL for an audio recording
 export const getAudioDownloadUrl = (recordingId, token) => {
-  return `${API_BASE_URL}/audio/${recordingId}/download?token=${token}`;
+  return `${API_BASE}/audio/${recordingId}/download?token=${token}`;
 };
 
 // Extract wishlist from audio recordings
 export const extractWishlist = async (childId, token) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/audio/child/${childId}/wishlist`, {
+    const response = await fetch(`${API_BASE}/audio/child/${childId}/wishlist`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
     });
-
     if (!response.ok) {
       throw new Error('Failed to extract wishlist');
     }
-
     return await response.json();
   } catch (error) {
     console.error('extractWishlist error:', error);
