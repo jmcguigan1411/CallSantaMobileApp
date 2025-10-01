@@ -1,9 +1,10 @@
-const API_BASE = 'https://callsantamobile-devicestorage.onrender.com/api';
+// services/audioService.js
+import { API_BASE_URL } from '../config';
 
 // Get all audio recordings for a child
 export const getChildAudioRecordings = async (childId, token) => {
   try {
-    const response = await fetch(`${API_BASE}/ai/chat-audio/${childId}`, {
+    const response = await fetch(`${API_BASE_URL}/ai/chat-audio/${childId}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -25,7 +26,7 @@ export const getChildAudioRecordings = async (childId, token) => {
 // Delete an audio recording
 export const deleteAudioRecording = async (recordingId, token) => {
   try {
-    const response = await fetch(`${API_BASE}/audio/${recordingId}`, {
+    const response = await fetch(`${API_BASE_URL}/audio/${recordingId}`, {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -46,13 +47,13 @@ export const deleteAudioRecording = async (recordingId, token) => {
 
 // Get download URL for an audio recording
 export const getAudioDownloadUrl = (recordingId, token) => {
-  return `${API_BASE}/audio/${recordingId}/download?token=${token}`;
+  return `${API_BASE_URL}/audio/${recordingId}/download?token=${token}`;
 };
 
 // Extract wishlist from audio recordings
 export const extractWishlist = async (childId, token) => {
   try {
-    const response = await fetch(`${API_BASE}/audio/child/${childId}/wishlist`, {
+    const response = await fetch(`${API_BASE_URL}/audio/child/${childId}/wishlist`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,

@@ -1,5 +1,5 @@
 // services/aiService.js - Complete file with token debugging
-const API_BASE = 'https://callsantamobile-devicestorage.onrender.com/api';
+import { API_BASE_URL } from '../config';
 
 // Function to handle Santa audio chat
 export const chatWithSantaAudio = async (childId, audioUri, token, options = {}) => {
@@ -58,7 +58,6 @@ export const chatWithSantaAudio = async (childId, audioUri, token, options = {})
       }
       console.log('[AI Service] Sending greeting request');
     } else if (audioUri) {
-      // Add audio file for regular chat
       formData.append('audio', {
         uri: audioUri,
         type: 'audio/m4a',
@@ -67,15 +66,11 @@ export const chatWithSantaAudio = async (childId, audioUri, token, options = {})
       console.log('[AI Service] Sending audio file');
     }
 
-    console.log('[AI Service] Making request to:', `${API_BASE_URL}/ai/chat-audio/${childId}`);
-    console.log('[AI Service] Authorization header:', token ? 'Bearer [TOKEN_PROVIDED]' : 'NO_AUTHORIZATION_HEADER');
-
-    // FIXED: Use the correct URL that matches your backend route
-    const response = await fetch(`${API_BASE}/ai/chat-audio/${childId}`, {
+    // Use API_BASE_URL from config
+    const response = await fetch(`${API_BASE_URL}/ai/chat-audio/${childId}`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
-        // Don't set Content-Type for FormData - let the browser set it
       },
       body: formData,
     });
@@ -90,16 +85,14 @@ export const chatWithSantaAudio = async (childId, audioUri, token, options = {})
       const errorText = await response.text();
       console.error('[AI Service] Server error response:', errorText);
       
-      // Try to parse as JSON for better error details
       let errorData;
       try {
         errorData = JSON.parse(errorText);
         console.error('[AI Service] Parsed error data:', errorData);
-        
         if (response.status === 401) {
           console.error('[AI Service] 🔐 Authentication failed - likely expired or invalid token');
         }
-      } catch (parseError) {
+      } catch {
         console.error('[AI Service] Error response is not JSON, raw text:', errorText);
       }
       
@@ -130,15 +123,13 @@ export const chatWithSantaAudioJSON = async (childId, audioUri, token, options =
       body.greetingText = options.greetingText;
       body.childName = options.childName;
     } else if (audioUri) {
-      // Convert audio file to base64 if your backend expects it
       const response = await fetch(audioUri);
       const blob = await response.blob();
       const base64Audio = await blobToBase64(blob);
       body.audioBase64 = base64Audio;
     }
 
-    // FIXED: Use the correct URL that matches your backend route
-    const response = await fetch(`${API_BASE}/ai/chat-audio/${childId}`, {
+    const response = await fetch(`${API_BASE_URL}/ai/chat-audio/${childId}`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -162,7 +153,7 @@ export const chatWithSantaAudioJSON = async (childId, audioUri, token, options =
 const blobToBase64 = (blob) => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result.split(',')[1]); // Remove data:audio/... prefix
+    reader.onloadend = () => resolve(reader.result.split(',')[1]);
     reader.onerror = reject;
     reader.readAsDataURL(blob);
   });
