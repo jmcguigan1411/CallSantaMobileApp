@@ -28,7 +28,9 @@ export default function ParentDashboard({ navigation }) {
   const fetchChildren = async () => {
     setLoading(true);
     try {
+      console.log('📥 Fetching children...');
       const data = await childService.getChildren();
+      console.log('✅ Children loaded:', data.length);
       setChildren(data || []);
       if (!data.some(c => c._id === selectedChildId)) setSelectedChildId(null);
     } catch (err) {
@@ -63,12 +65,23 @@ export default function ParentDashboard({ navigation }) {
           style: 'destructive',
           onPress: async () => {
             try {
-              await localAudioService.deleteChildWithCleanup(childId);
+              console.log('🗑️ Deleting child:', childId, childName);
+              
+              // Delete local recordings first
+              await localAudioService.deleteChildRecordings(childId);
+              console.log('✅ Local recordings deleted');
+              
+              // Delete child from server
+              await childService.deleteChild(childId);
+              console.log('✅ Child deleted from server');
+              
+              // Reload children to update the UI
+              await fetchChildren();
+              
               Alert.alert('Success', `${childName} has been deleted.`);
-              fetchChildren();
             } catch (err) {
-              console.error('Failed to delete child:', err);
-              Alert.alert('Error', err.message);
+              console.error('❌ Failed to delete child:', err);
+              Alert.alert('Error', 'Failed to delete child profile');
             }
           },
         },

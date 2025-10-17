@@ -699,44 +699,57 @@ export default function SantaCallScreen({ route, navigation }) {
 
       if (response?.audioBase64) {
         // Save recording locally with transcription
-        if (response.transcription && response.transcription.trim()) {
-          try {
-            await localAudioService.saveRecording(
-              audioUri,
-              child._id,
-              child.name,
-              response.transcription
-            );
-            addLog(`✅ Recording saved locally: "${response.transcription}"`, 'SAVE');
-          } catch (saveError) {
-            addLog(`⚠️ Failed to save locally: ${saveError.message}`, 'ERROR');
-          }
-        }
+       if (response.transcription && response.transcription.trim()) {
+  try {
+    addLog(`💾 Attempting to save recording...`, 'SAVE');
+    addLog(`   - Audio URI: ${audioUri}`, 'SAVE');
+    addLog(`   - Child ID: ${child._id}`, 'SAVE');
+    addLog(`   - Child Name: ${child.name}`, 'SAVE');
+    addLog(`   - Transcription: "${response.transcription.substring(0, 50)}..."`, 'SAVE');
+    
+    const savedMetadata = await localAudioService.saveRecording(
+      audioUri,
+      child._id,
+      child.name,
+      response.transcription
+    );
+    
+    addLog(`✅ Recording saved successfully!`, 'SAVE');
+    addLog(`   - File: ${savedMetadata.fileName}`, 'SAVE');
+    addLog(`   - Sequence: #${savedMetadata.sequenceNumber}`, 'SAVE');
+  } catch (saveError) {
+    addLog(`⚠️ Failed to save recording: ${saveError.message}`, 'ERROR');
+    addLog(`   - Error stack: ${saveError.stack}`, 'ERROR');
+  }
+} else {
+  addLog(`⚠️ No transcription available, recording NOT saved`, 'WARNING');
+  addLog(`   - Has transcription: ${!!response.transcription}`, 'WARNING');
+  addLog(`   - Transcription value: "${response.transcription}"`, 'WARNING');
+}
 
-        // Check if child said goodbye
-        if (response.text && detectGoodbye(response.text)) {
-          addLog(`👋 Goodbye detected in: "${response.text}"`, 'GOODBYE');
-          await handleChildGoodbye();
-          return;
-        }
-        
-        addLog(`🔊 Playing Santa response (${response.audioBase64.length} chars)`, 'RESPONSE');
-        await playAudioFromBase64(response.audioBase64);
-      } else {
-        addLog('⚠️ No audio in response, restarting listening', 'WARNING');
-        setSantaSpeaking(false);
-        setTimeout(() => startEnhancedListening(), 2000);
-      }
+// Check if child said goodbye
+if (response.text && detectGoodbye(response.text)) {
+  addLog(`👋 Goodbye detected in: "${response.text}"`, 'GOODBYE');
+  await handleChildGoodbye();
+  return;
+}
 
-    } catch (error) {
-      addLog(`❌ Speech processing error: ${error.message}`, 'ERROR');
-      addLog(`Error stack: ${error.stack}`, 'ERROR');
-      await stopFillers();
-      setIsProcessing(false);
-      setSantaSpeaking(false);
-      setTimeout(() => startEnhancedListening(), 3000);
-    }
-  };
+addLog(`🔊 Playing Santa response (${response.audioBase64.length} chars)`, 'RESPONSE');
+await playAudioFromBase64(response.audioBase64);
+} else {
+addLog('⚠️ No audio in response, restarting listening', 'WARNING');
+setSantaSpeaking(false);
+setTimeout(() => startEnhancedListening(), 2000);
+}
+} catch (error) {
+addLog(`❌ Speech processing error: ${error.message}`, 'ERROR');
+addLog(`Error stack: ${error.stack}`, 'ERROR');
+await stopFillers();
+setIsProcessing(false);
+setSantaSpeaking(false);
+setTimeout(() => startEnhancedListening(), 3000);
+}
+};
 
   const playAudioFromBase64 = async (audioBase64, shouldEndCall = false) => {
     try {

@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_BASE = 'https://callsantamobile-devicestorage.onrender.com/api';
+const API_BASE = 'https://callsantamobileapp.onrender.com/api';
 const API_URL = `${API_BASE}/children`;
 
 // Helper to get auth token

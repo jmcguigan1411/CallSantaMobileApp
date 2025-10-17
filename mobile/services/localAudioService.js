@@ -224,51 +224,62 @@ export const cleanupOrphanedFiles = async () => {
   }
 };
 
-// Extract wishlist from local recordings (placeholder - needs backend integration)
+// Extract wishlist from local recordings using backend ChatGPT analysis
 export const extractWishlistLocal = async (childId, childName, token) => {
   try {
     const recordings = await getRecordingsForChild(childId);
     
     if (recordings.length === 0) {
-      return { wishlist: [] };
+      return { wishlist: [], recordingsAnalyzed: 0 };
     }
     
     // Collect all transcriptions
     const transcriptions = recordings
       .map(r => r.transcription)
       .filter(t => t && t.trim())
-      .join(' ');
+      .join('\n\n');
     
-    if (!transcriptions) {
-      return { wishlist: [] };
+    if (!transcriptions || transcriptions.trim().length === 0) {
+      console.log('No transcriptions found');
+      return { wishlist: [], recordingsAnalyzed: 0 };
     }
     
-    // Here you would call your backend to extract wishlist items from transcriptions
-    // For now, return a placeholder
-    // TODO: Implement API call to backend
-    // const response = await fetch('YOUR_BACKEND_URL/api/extract-wishlist', {
-    //   method: 'POST',
-    //   headers: {
-    //     'Content-Type': 'application/json',
-    //     'Authorization': `Bearer ${token}`
-    //   },
-    //   body: JSON.stringify({ transcriptions, childId })
-    // });
-    // const data = await response.json();
-    // return { wishlist: data.wishlist };
+    console.log('📤 Sending to backend:', {
+      childName,
+      recordingsCount: recordings.length,
+      transcriptionsLength: transcriptions.length,
+      transcriptionsPreview: transcriptions.substring(0, 100)
+    });
     
-    // Placeholder: Extract simple keywords that might be gifts
-    const giftKeywords = ['want', 'like', 'wish', 'get', 'need'];
-    const words = transcriptions.toLowerCase().split(/\s+/);
-    const potentialGifts = [];
-    
-    for (let i = 0; i < words.length; i++) {
-      if (giftKeywords.includes(words[i]) && words[i + 1]) {
-        potentialGifts.push(words[i + 1]);
-      }
+    // Call backend to analyze with ChatGPT
+    const response = await fetch('https://callsantamobileapp.onrender.com/api/ai/wishlist/extract', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ 
+        transcriptions, 
+        childName,
+        childId,
+        recordingsCount: recordings.length
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Backend error:', response.status, errorText);
+      throw new Error(`Backend error: ${response.status}`);
     }
+
+    const data = await response.json();
+    console.log('📥 Backend response:', data);
     
-    return { wishlist: [...new Set(potentialGifts)].slice(0, 10) };
+    return {
+      wishlist: data.wishlist || [],
+      recordingsAnalyzed: data.recordingsAnalyzed || recordings.length,
+      childName: data.childName || childName
+    };
   } catch (error) {
     console.error('Error extracting wishlist:', error);
     throw error;

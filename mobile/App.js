@@ -5,7 +5,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { AuthProvider, AuthContext } from './context/AuthContext';
-import { TooltipProvider } from './context/TooltipContext'; // UNCOMMENTED
+import { TooltipProvider } from './context/TooltipContext';
 import ProtectedScreen from './components/ProtectedScreen';
 import LogoutButton from './components/LogoutButton';
 import TermsModal from './components/TermsModal';
@@ -19,6 +19,7 @@ import ChildProfileScreen from './screens/ChildProfileScreen';
 import SantaChatScreen from './screens/SantaChatScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
 import AudioFilesScreen from './screens/AudioFilesScreen';
+import WishlistScreen from './screens/WishlistScreen';
 import { TouchableOpacity, View, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -111,6 +112,16 @@ function AppDrawer() {
           title: 'Dashboard',
           drawerIcon: ({ color, size }) => (
             <Ionicons name="home" size={size} color={color} />
+          ),
+        }}
+      />
+      <Drawer.Screen
+        name="Wishlist"
+        component={WishlistScreen}
+        options={{
+          title: 'Wishlists',
+          drawerIcon: ({ color, size }) => (
+            <Ionicons name="gift" size={size} color={color} />
           ),
         }}
       />

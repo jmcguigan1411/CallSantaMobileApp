@@ -59,17 +59,23 @@ exports.addChild = async (req, res) => {
 // PUT /api/children/:id
 exports.updateChild = async (req, res) => {
   try {
-    const { name, age, gender, phoneticSpelling, pronunciationSamples } = req.body;
-
-    const updateData = { name, age, gender, phoneticSpelling };
-    if (pronunciationSamples) updateData.pronunciationSamples = pronunciationSamples;
+    const updateData = req.body;
 
     console.log('[DEBUG] REQ USER:', req.user);
     console.log('[DEBUG] Updating child ID:', req.params.id, 'with data:', updateData);
 
+    // Remove undefined values to prevent clearing fields
+    Object.keys(updateData).forEach(key => {
+      if (updateData[key] === undefined) {
+        delete updateData[key];
+      }
+    });
+
+    console.log('[DEBUG] Cleaned update data:', updateData);
+
     const child = await ChildProfile.findOneAndUpdate(
       { _id: req.params.id, parent: req.user._id },
-      updateData,
+      { $set: updateData },
       { new: true, runValidators: true }
     );
 

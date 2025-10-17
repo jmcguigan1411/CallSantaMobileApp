@@ -58,11 +58,23 @@ function AudioFilesScreen({ navigation }) {
   const loadRecordings = async (childId) => {
     try {
       setLoading(true);
+      console.log('🔍 Loading recordings for child:', childId);
+      
       const data = await localAudioService.getRecordingsForChild(childId);
+      console.log('📦 Received recordings data:', data);
+      console.log('📊 Number of recordings:', data.length);
+      
+      if (data.length > 0) {
+        console.log('📝 First recording:', JSON.stringify(data[0], null, 2));
+      }
+      
       // Sort by date, newest first
       const sortedData = data.sort((a, b) => new Date(b.date) - new Date(a.date));
+      console.log('✅ Sorted recordings:', sortedData.length);
+      
       setRecordings(sortedData);
     } catch (error) {
+      console.error('❌ Error loading recordings:', error);
       Alert.alert('Error', 'Failed to load recordings');
     } finally {
       setLoading(false);
@@ -139,46 +151,35 @@ function AudioFilesScreen({ navigation }) {
       return;
     }
 
-    Alert.alert(
-      'Extract Wishlist',
-      `Analyze ${recordings.length} recording(s) to extract ${selectedChild.name}'s wishlist?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Analyze',
-          onPress: async () => {
-            try {
-              setLoading(true);
-              const result = await localAudioService.extractWishlistLocal(
-                selectedChild._id,
-                selectedChild.name,
-                token
-              );
+    try {
+      setLoading(true);
+      
+      const result = await localAudioService.extractWishlistLocal(
+        selectedChild._id,
+        selectedChild.name,
+        token
+      );
 
-              if (result.wishlist && result.wishlist.length > 0) {
-                // Update child's wishlist
-                await childService.updateChild(selectedChild._id, {
-                  wishlist: result.wishlist,
-                });
+      if (result.wishlist && result.wishlist.length > 0) {
+        // Update child's wishlist in the cloud
+        await childService.updateChild(selectedChild._id, {
+          wishlist: result.wishlist,
+        });
 
-                Alert.alert(
-                  'Wishlist Updated',
-                  `Found ${result.wishlist.length} items:\n\n${result.wishlist.join('\n')}`,
-                  [{ text: 'OK', onPress: () => navigation.navigate('ParentDashboard') }]
-                );
-              } else {
-                Alert.alert('No Items Found', 'Could not extract any wishlist items from the recordings.');
-              }
-            } catch (error) {
-              Alert.alert('Error', 'Failed to extract wishlist');
-              console.error('Wishlist extraction error:', error);
-            } finally {
-              setLoading(false);
-            }
-          },
-        },
-      ]
-    );
+        console.log('✅ Wishlist updated in cloud:', result.wishlist);
+
+        // Navigate to wishlist screen immediately (no modal)
+        setLoading(false);
+        navigation.navigate('Wishlist');
+      } else {
+        setLoading(false);
+        Alert.alert('No Items Found', 'Could not extract any wishlist items from the recordings.');
+      }
+    } catch (error) {
+      setLoading(false);
+      Alert.alert('Error', 'Failed to extract wishlist');
+      console.error('Wishlist extraction error:', error);
+    }
   };
 
   const formatDate = (dateString) => {
@@ -505,4 +506,5 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 });
+
 export default AudioFilesScreen;
