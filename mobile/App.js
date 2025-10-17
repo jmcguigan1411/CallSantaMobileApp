@@ -5,7 +5,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { AuthProvider, AuthContext } from './context/AuthContext';
-import { TooltipProvider } from '../context/TooltipContext'; // UNCOMMENTED
+import { TooltipProvider } from './context/TooltipContext'; // UNCOMMENTED
 import ProtectedScreen from './components/ProtectedScreen';
 import LogoutButton from './components/LogoutButton';
 import TermsModal from './components/TermsModal';
