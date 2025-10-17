@@ -1,49 +1,13 @@
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, Platform } from 'react-native';
-import * as WebBrowser from 'expo-web-browser';
-import * as Google from 'expo-auth-session/providers/google';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { AuthContext } from '../context/AuthContext';
 import Snowflakes from '../components/Snowflakes';
-
-WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen({ navigation }) {
   const { login, socialLogin, loading } = useContext(AuthContext);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-
-  // --- Google Auth ---
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    iosClientId: "<YOUR_IOS_CLIENT_ID>.apps.googleusercontent.com",
-    androidClientId: "<YOUR_ANDROID_CLIENT_ID>.apps.googleusercontent.com",
-    expoClientId: "<YOUR_EXPO_CLIENT_ID>.apps.googleusercontent.com",
-  });
-
-  // Handle Google response
-  useEffect(() => {
-    if (response?.type === 'success') {
-      const { authentication } = response;
-      const fetchGoogleUser = async () => {
-        try {
-          const res = await fetch('https://www.googleapis.com/userinfo/v2/me', {
-            headers: { Authorization: `Bearer ${authentication.accessToken}` },
-          });
-          const userInfo = await res.json();
-
-          await socialLogin('google', authentication.accessToken, userInfo.email);
-
-          navigation.reset({
-            index: 0,
-            routes: [{ name: 'AppDrawer' }],
-          });
-        } catch (err) {
-          console.error('Google login error:', err);
-        }
-      };
-      fetchGoogleUser();
-    }
-  }, [response]);
 
   const handleLogin = async () => {
     const data = await login(email, password);
@@ -120,15 +84,6 @@ export default function LoginScreen({ navigation }) {
           onPress={() => navigation.navigate('ForgotPassword')}
         >
           <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-        </TouchableOpacity>
-
-        {/* Google Login */}
-        <TouchableOpacity
-          style={[styles.button, { backgroundColor: '#4285F4' }]}
-          disabled={!request}
-          onPress={() => promptAsync()}
-        >
-          <Text style={styles.buttonText}>Continue with Google</Text>
         </TouchableOpacity>
 
         {/* Apple Login (iOS only) */}

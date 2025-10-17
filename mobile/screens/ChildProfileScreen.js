@@ -16,6 +16,12 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as childService from '../services/childService';
+import {
+  getChildWishlist,
+  addWishlistItem,
+  toggleWishlistItem,
+  deleteWishlistItem
+} from '../services/wishlistService';
 import Snowflakes from '../components/Snowflakes';
 
 export default function ChildProfileScreen({ route, navigation }) {
@@ -28,6 +34,11 @@ export default function ChildProfileScreen({ route, navigation }) {
   const [goodBehavior, setGoodBehavior] = useState('');
   const [badBehavior, setBadBehavior] = useState('');
   const [loading, setLoading] = useState(false);
+  
+  // Wishlist state
+  const [wishlist, setWishlist] = useState([]);
+  const [newWishItem, setNewWishItem] = useState('');
+  const [showWishlist, setShowWishlist] = useState(false);
 
   useEffect(() => {
     if (childId) {
@@ -44,8 +55,69 @@ export default function ChildProfileScreen({ route, navigation }) {
         })
         .catch(() => Alert.alert('Error', 'Failed to load child data'))
         .finally(() => setLoading(false));
+      
+      // Load wishlist
+      loadWishlist();
     }
   }, [childId]);
+
+  const loadWishlist = async () => {
+    if (!childId) return;
+    try {
+      const items = await getChildWishlist(childId);
+      setWishlist(items);
+    } catch (error) {
+      console.error('Error loading wishlist:', error);
+    }
+  };
+
+  const handleAddWishItem = async () => {
+    if (!newWishItem.trim()) return;
+    
+    if (!childId) {
+      Alert.alert('Error', 'Please save the profile first before adding wishlist items');
+      return;
+    }
+
+    try {
+      await addWishlistItem(childId, newWishItem);
+      setNewWishItem('');
+      await loadWishlist();
+    } catch (error) {
+      Alert.alert('Error', 'Failed to add wishlist item');
+    }
+  };
+
+  const handleToggleItem = async (itemId) => {
+    try {
+      await toggleWishlistItem(childId, itemId);
+      await loadWishlist();
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update item');
+    }
+  };
+
+  const handleDeleteItem = async (itemId) => {
+    Alert.alert(
+      'Delete Item',
+      'Remove this item from the wishlist?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteWishlistItem(childId, itemId);
+              await loadWishlist();
+            } catch (error) {
+              Alert.alert('Error', 'Failed to delete item');
+            }
+          }
+        }
+      ]
+    );
+  };
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -240,6 +312,93 @@ export default function ChildProfileScreen({ route, navigation }) {
               </View>
             )}
 
+            {/* Wishlist Section - Only show if editing */}
+            {childId && (
+              <View style={styles.wishlistSection}>
+                <TouchableOpacity
+                  style={styles.behaviorToggleContainer}
+                  onPress={() => setShowWishlist(!showWishlist)}
+                >
+                  <View style={styles.behaviorToggleHeader}>
+                    <Ionicons name="gift" size={24} color="#FFD700" />
+                    <Text style={styles.behaviorToggleLabel}>
+                      Wishlist ({wishlist.length})
+                    </Text>
+                  </View>
+                  <Ionicons 
+                    name={showWishlist ? "chevron-up" : "chevron-down"} 
+                    size={24} 
+                    color="#fff" 
+                  />
+                </TouchableOpacity>
+
+                {showWishlist && (
+                  <View style={styles.wishlistContainer}>
+                    {/* Add Item Input */}
+                    <View style={styles.addWishContainer}>
+                      <TextInput
+                        style={[styles.input, styles.wishInput]}
+                        placeholder="Add a wish..."
+                        placeholderTextColor="#ccc"
+                        value={newWishItem}
+                        onChangeText={setNewWishItem}
+                        onSubmitEditing={handleAddWishItem}
+                      />
+                      <TouchableOpacity
+                        style={styles.addWishButton}
+                        onPress={handleAddWishItem}
+                      >
+                        <Ionicons name="add-circle" size={32} color="#4CAF50" />
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* Wishlist Items */}
+                    {wishlist.length === 0 ? (
+                      <Text style={styles.emptyWishlist}>
+                        No items yet. Add wishes or chat with Santa!
+                      </Text>
+                    ) : (
+                      wishlist.map((item) => (
+                        <View key={item.id} style={styles.wishItem}>
+                          <TouchableOpacity
+                            style={styles.wishItemContent}
+                            onPress={() => handleToggleItem(item.id)}
+                          >
+                            <Ionicons
+                              name={item.completed ? "checkbox" : "square-outline"}
+                              size={24}
+                              color={item.completed ? "#4CAF50" : "#fff"}
+                            />
+                            <View style={styles.wishItemTextContainer}>
+                              <Text
+                                style={[
+                                  styles.wishItemText,
+                                  item.completed && styles.wishItemCompleted
+                                ]}
+                              >
+                                {item.item}
+                              </Text>
+                              {item.fromChat && (
+                                <Text style={styles.fromChatBadge}>
+                                  📞 From Santa Chat
+                                </Text>
+                              )}
+                            </View>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.deleteWishButton}
+                            onPress={() => handleDeleteItem(item.id)}
+                          >
+                            <Ionicons name="trash" size={20} color="#FF5252" />
+                          </TouchableOpacity>
+                        </View>
+                      ))
+                    )}
+                  </View>
+                )}
+              </View>
+            )}
+
             <TouchableOpacity style={styles.button} onPress={handleSave}>
               <Text style={styles.buttonText}>{childId ? 'Update Child' : 'Add Child'}</Text>
             </TouchableOpacity>
@@ -385,6 +544,70 @@ const styles = StyleSheet.create({
     minHeight: 80,
     textAlignVertical: 'top',
     paddingTop: 12,
+  },
+  // Wishlist Styles
+  wishlistSection: {
+    marginBottom: 15,
+  },
+  wishlistContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 10,
+    padding: 15,
+    marginTop: -10,
+  },
+  addWishContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  wishInput: {
+    flex: 1,
+    marginBottom: 0,
+    marginRight: 10,
+  },
+  addWishButton: {
+    padding: 5,
+  },
+  emptyWishlist: {
+    textAlign: 'center',
+    color: '#FFD700',
+    fontSize: 14,
+    fontStyle: 'italic',
+    paddingVertical: 20,
+  },
+  wishItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 10,
+  },
+  wishItemContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  wishItemTextContainer: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  wishItemText: {
+    fontSize: 16,
+    color: '#fff',
+  },
+  wishItemCompleted: {
+    textDecorationLine: 'line-through',
+    color: '#ccc',
+  },
+  fromChatBadge: {
+    fontSize: 11,
+    color: '#FFD700',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  deleteWishButton: {
+    padding: 8,
   },
   button: {
     backgroundColor: '#4CAF50',

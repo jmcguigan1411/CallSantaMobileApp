@@ -9,9 +9,11 @@ import {
   Platform,
 } from 'react-native';
 import { Audio } from 'expo-av';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthContext } from '../context/AuthContext';
+import { useTooltips } from '../context/TooltipContext';
+import TooltipOverlay from '../components/TooltipOverlay';
 import { chatWithSantaAudio } from '../services/aiService';
 import * as localAudioService from '../services/localAudioService';
 
@@ -19,7 +21,7 @@ import * as localAudioService from '../services/localAudioService';
 const MAX_CALL_DURATION = 180; // 3 minutes in seconds
 const WARNING_TIME = 150; // Show warning at 2.5 minutes
 
-// Audio-level VAD hook with silence timer reset
+// Audio-level VAD hook with simple time-based recording
 const useVoiceActivityDetection = (addLog) => {
   const [vadState, setVadState] = useState({
     isListening: false,
@@ -34,35 +36,28 @@ const useVoiceActivityDetection = (addLog) => {
     recordingRef: null,
     isActive: false,
     recordingStartTime: null,
-    silenceTimer: null,
     durationTimer: null,
-    meteringTimer: null,
     onVoiceStart: null,
     onVoiceEnd: null,
     onSilenceDetected: null,
-    hasDetectedVoice: false,
-    lastSoundTime: null,
   });
 
   const VAD_CONFIG = {
-    MIN_RECORDING_TIME: 1500,
-    SILENCE_DETECTION_TIME: 5000,
-    MAX_RECORDING_TIME: 30000,
+    AUTO_STOP_TIME: 5000, // Stop after 5 seconds of recording
+    MIN_RECORDING_TIME: 1000, // 1 second minimum
+    MAX_RECORDING_TIME: 30000, // 30 seconds max
     DURATION_UPDATE_INTERVAL: 100,
-    METERING_INTERVAL: 100,
-    VOICE_THRESHOLD: -40,
   };
 
   const logSafe = (msg) => {
     if (typeof addLog === 'function') {
       addLog(msg);
-    } else {
-      console.log(msg);
     }
+    console.log(msg);
   };
 
   const initializeVAD = async (recordingInstance, callbacks = {}) => {
-    logSafe('🔊 === INITIALIZING TIME-BASED VAD SYSTEM ===');
+    logSafe('🔊 [VAD] Initializing simple time-based VAD...');
 
     vadRef.current.recordingRef = recordingInstance;
     vadRef.current.onVoiceStart = callbacks.onVoiceStart;
@@ -70,8 +65,6 @@ const useVoiceActivityDetection = (addLog) => {
     vadRef.current.onSilenceDetected = callbacks.onSilenceDetected;
     vadRef.current.isActive = true;
     vadRef.current.recordingStartTime = Date.now();
-    vadRef.current.lastSoundTime = Date.now();
-    vadRef.current.hasDetectedVoice = false;
 
     setVadState({
       isListening: true,
@@ -82,27 +75,23 @@ const useVoiceActivityDetection = (addLog) => {
       audioLevel: 0,
     });
 
-    startAudioLevelDetection();
-    return true;
-  };
-
-  const startAudioLevelDetection = () => {
-    logSafe('🎤 === STARTING TIME-BASED DETECTION ===');
-    
-    // Assume voice activity starts after brief delay
+    // Assume voice starts immediately
     setTimeout(() => {
-      if (vadRef.current.isActive && !vadRef.current.hasDetectedVoice) {
-        logSafe('🗣️ VOICE ACTIVITY ASSUMED');
-        vadRef.current.hasDetectedVoice = true;
+      if (vadRef.current.isActive) {
+        logSafe('🗣️ [VAD] Voice activity started');
         vadRef.current.onVoiceStart?.();
       }
     }, 500);
 
+    startDurationTracking();
+    return true;
+  };
+
+  const startDurationTracking = () => {
+    logSafe('⏱️ [VAD] Starting duration tracking...');
+
     vadRef.current.durationTimer = setInterval(() => {
-      if (!vadRef.current.isActive) {
-        clearInterval(vadRef.current.durationTimer);
-        return;
-      }
+      if (!vadRef.current.isActive) return;
 
       const currentTime = Date.now();
       const duration = currentTime - vadRef.current.recordingStartTime;
@@ -113,32 +102,29 @@ const useVoiceActivityDetection = (addLog) => {
         waitingForSilence: duration >= VAD_CONFIG.MIN_RECORDING_TIME,
       }));
 
-      // Only stop at max recording time - no silence detection
-      if (duration >= VAD_CONFIG.MAX_RECORDING_TIME) {
-        logSafe(`⏰ RECORDING COMPLETE (${(duration/1000).toFixed(1)}s)`);
+      // Auto-stop after 5 seconds
+      if (duration >= VAD_CONFIG.AUTO_STOP_TIME) {
+        logSafe(`✅ [VAD] Auto-stopping after ${(duration/1000).toFixed(1)}s`);
         vadRef.current.onSilenceDetected?.();
         stopVAD();
       }
 
+      // Failsafe max time
+      if (duration >= VAD_CONFIG.MAX_RECORDING_TIME) {
+        logSafe(`⏰ [VAD] Max recording time reached (30s)`);
+        vadRef.current.onSilenceDetected?.();
+        stopVAD();
+      }
     }, VAD_CONFIG.DURATION_UPDATE_INTERVAL);
   };
 
   const stopVAD = () => {
+    logSafe('🛑 [VAD] Stopping VAD');
     vadRef.current.isActive = false;
 
     if (vadRef.current.durationTimer) {
       clearInterval(vadRef.current.durationTimer);
       vadRef.current.durationTimer = null;
-    }
-
-    if (vadRef.current.meteringTimer) {
-      clearInterval(vadRef.current.meteringTimer);
-      vadRef.current.meteringTimer = null;
-    }
-
-    if (vadRef.current.silenceTimer) {
-      clearTimeout(vadRef.current.silenceTimer);
-      vadRef.current.silenceTimer = null;
     }
 
     setVadState({
@@ -149,9 +135,6 @@ const useVoiceActivityDetection = (addLog) => {
       silenceStartTime: null,
       audioLevel: 0,
     });
-
-    vadRef.current.hasDetectedVoice = false;
-    vadRef.current.lastSoundTime = null;
   };
 
   return { vadState, initializeVAD, stopVAD, VAD_CONFIG };
@@ -160,6 +143,7 @@ const useVoiceActivityDetection = (addLog) => {
 export default function SantaCallScreen({ route, navigation }) {
   const child = route?.params?.child;
   const { token } = useContext(AuthContext);
+  const { TUTORIAL_STEPS, completeStep } = useTooltips();
 
   const [callStatus, setCallStatus] = useState('Calling...');
   const [callDuration, setCallDuration] = useState(0);
@@ -168,14 +152,15 @@ export default function SantaCallScreen({ route, navigation }) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [hasShownWarning, setHasShownWarning] = useState(false);
   const [callEnding, setCallEnding] = useState(false);
+  const [callEnded, setCallEnded] = useState(false);
   const [isSpeakerOn, setIsSpeakerOn] = useState(false);
+  const [showDebug, setShowDebug] = useState(true);
 
-  const addLog = (msg) => {
-    if (__DEV__) {
-      const timestamp = new Date().toLocaleTimeString();
-      console.log(msg);
-      setDevLogs((prev) => [...prev.slice(-25), `[${timestamp}] ${msg}`]);
-    }
+  const addLog = (msg, category = 'INFO') => {
+    const timestamp = new Date().toLocaleTimeString();
+    const formattedMsg = `[${timestamp}] [${category}] ${msg}`;
+    console.log(formattedMsg);
+    setDevLogs((prev) => [...prev.slice(-50), formattedMsg]);
   };
 
   const { vadState, initializeVAD, stopVAD, VAD_CONFIG } = useVoiceActivityDetection(addLog);
@@ -204,16 +189,16 @@ export default function SantaCallScreen({ route, navigation }) {
       extension: '.m4a',
       outputFormat: Audio.RECORDING_OPTION_ANDROID_OUTPUT_FORMAT_MPEG_4,
       audioEncoder: Audio.RECORDING_OPTION_ANDROID_AUDIO_ENCODER_AAC,
-      sampleRate: 16000,
+      sampleRate: 44100,
       numberOfChannels: 1,
-      bitRate: 64000,
+      bitRate: 128000,
     },
     ios: {
       extension: '.m4a',
-      audioQuality: Audio.RECORDING_OPTION_IOS_AUDIO_QUALITY_MEDIUM,
-      sampleRate: 16000,
+      audioQuality: Audio.RECORDING_OPTION_IOS_AUDIO_QUALITY_HIGH,
+      sampleRate: 44100,
       numberOfChannels: 1,
-      bitRate: 64000,
+      bitRate: 128000,
       linearPCMBitDepth: 16,
       linearPCMIsBigEndian: false,
       linearPCMIsFloat: false,
@@ -234,6 +219,7 @@ export default function SantaCallScreen({ route, navigation }) {
   const handleTimeWarning = async () => {
     if (callEnding) return;
     
+    addLog('Sending time warning to child', 'WARNING');
     const warningMessage = "Ho ho ho! I'm getting very busy here at the North Pole! We need to wrap up soon!";
     
     try {
@@ -255,7 +241,7 @@ export default function SantaCallScreen({ route, navigation }) {
         setSantaSpeaking(false);
       }
     } catch (error) {
-      addLog(`❌ Warning error: ${error.message}`);
+      addLog(`Warning error: ${error.message}`, 'ERROR');
       await stopFillers();
       setSantaSpeaking(false);
     }
@@ -265,6 +251,7 @@ export default function SantaCallScreen({ route, navigation }) {
     if (callEnding) return;
     setCallEnding(true);
     
+    addLog('Maximum call duration reached, ending call', 'WARNING');
     const spokenName = (child?.phoneticSpelling?.trim()) || child?.name || 'friend';
     const farewellMessage = `Ho ho ho! I must go now, ${spokenName}! Remember to be nice to mummy and daddy, and stay on the nice list! Merry Christmas!`;
     
@@ -288,7 +275,7 @@ export default function SantaCallScreen({ route, navigation }) {
         setTimeout(() => endCall(), 1000);
       }
     } catch (error) {
-      addLog(`❌ Farewell error: ${error.message}`);
+      addLog(`Farewell error: ${error.message}`, 'ERROR');
       await stopFillers();
       setSantaSpeaking(false);
       setTimeout(() => endCall(), 1000);
@@ -299,7 +286,7 @@ export default function SantaCallScreen({ route, navigation }) {
     if (callEnding) return;
     setCallEnding(true);
     
-    addLog('👋 Child said goodbye, Santa responding...');
+    addLog('Child said goodbye, Santa responding with farewell', 'GOODBYE');
     
     const spokenName = (child?.phoneticSpelling?.trim()) || child?.name || 'friend';
     const goodbyeMessage = `Goodbye ${spokenName}! Remember to be nice to mummy and daddy! Stay on the nice list! Merry Christmas!`;
@@ -324,7 +311,7 @@ export default function SantaCallScreen({ route, navigation }) {
         setTimeout(() => endCall(), 1000);
       }
     } catch (error) {
-      addLog(`❌ Goodbye error: ${error.message}`);
+      addLog(`Goodbye error: ${error.message}`, 'ERROR');
       await stopFillers();
       setSantaSpeaking(false);
       setTimeout(() => endCall(), 1000);
@@ -341,9 +328,9 @@ export default function SantaCallScreen({ route, navigation }) {
         staysActiveInBackground: false,
       });
       setIsSpeakerOn(!isSpeakerOn);
-      addLog(`🔊 Speaker ${!isSpeakerOn ? 'ON' : 'OFF'}`);
+      addLog(`Speaker ${!isSpeakerOn ? 'ON' : 'OFF'}`, 'AUDIO');
     } catch (error) {
-      addLog(`❌ Speaker toggle error: ${error.message}`);
+      addLog(`Speaker toggle error: ${error.message}`, 'ERROR');
     }
   };
 
@@ -380,18 +367,18 @@ export default function SantaCallScreen({ route, navigation }) {
         }
       });
     } catch (error) {
-      addLog(`⚠️ Filler playback error: ${error.message}`);
+      addLog(`Filler playback error: ${error.message}`, 'ERROR');
     }
   };
 
   const startFillers = async () => {
-    addLog('🎭 Starting filler sounds...');
+    addLog('Starting filler sounds', 'AUDIO');
     isPlayingFillers.current = true;
     await playRandomFiller();
   };
 
   const stopFillers = async () => {
-    addLog('🛑 Stopping filler sounds');
+    addLog('Stopping filler sounds', 'AUDIO');
     isPlayingFillers.current = false;
 
     if (fillerTimeoutRef.current) {
@@ -411,11 +398,14 @@ export default function SantaCallScreen({ route, navigation }) {
   };
 
   useEffect(() => {
-    addLog('🚀 Initializing Santa call...');
+    addLog('=== SANTA CALL INITIALIZING ===', 'INIT');
+    addLog(`Child: ${child?.name} (ID: ${child?._id})`, 'INIT');
+    addLog(`Token present: ${!!token}`, 'INIT');
+    
     const initTimeout = setTimeout(() => initializeCall(), 3000);
 
     return () => {
-      addLog('🧹 Component unmounting...');
+      addLog('Component unmounting, cleanup initiated', 'CLEANUP');
       isCleaningUp.current = true;
       clearTimeout(initTimeout);
       cleanup();
@@ -424,10 +414,10 @@ export default function SantaCallScreen({ route, navigation }) {
 
   useEffect(() => {
     if (callStatus === 'In Call' && callDuration >= MAX_CALL_DURATION && !callEnding) {
-      addLog('⏰ Maximum call duration reached');
+      addLog('Maximum call duration reached', 'WARNING');
       handleTimeLimitReached();
     } else if (callStatus === 'In Call' && callDuration >= WARNING_TIME && !hasShownWarning && !callEnding) {
-      addLog('⚠️ Approaching time limit, sending warning...');
+      addLog('Approaching time limit, sending warning', 'WARNING');
       setHasShownWarning(true);
       handleTimeWarning();
     }
@@ -435,10 +425,12 @@ export default function SantaCallScreen({ route, navigation }) {
 
   const initializeCall = async () => {
     try {
-      addLog('📱 Call connected!');
+      addLog('Call connected, initializing audio system', 'INIT');
       setCallStatus('In Call');
 
       const permissionResponse = await Audio.requestPermissionsAsync();
+      addLog(`Microphone permission: ${permissionResponse.status}`, 'INIT');
+      
       if (permissionResponse.status !== 'granted') {
         throw new Error('Microphone permission required');
       }
@@ -450,12 +442,14 @@ export default function SantaCallScreen({ route, navigation }) {
         playThroughEarpieceAndroid: false,
         staysActiveInBackground: false,
       });
+      addLog('Audio mode configured', 'INIT');
 
       timerId.current = setInterval(() => setCallDuration(prev => prev + 1), 1000);
+      addLog('Call timer started', 'INIT');
 
       await santaGreeting();
     } catch (error) {
-      addLog(`❌ Call initialization error: ${error.message}`);
+      addLog(`Call initialization error: ${error.message}`, 'ERROR');
       alert(`Call setup failed: ${error.message}`);
     }
   };
@@ -463,7 +457,7 @@ export default function SantaCallScreen({ route, navigation }) {
   const santaGreeting = async () => {
     try {
       setSantaSpeaking(true);
-      addLog('🎅 Playing Santa greeting...');
+      addLog('Playing Santa greeting...', 'GREETING');
 
       if (!token || !child?._id) {
         throw new Error('Missing authentication or child data');
@@ -471,6 +465,9 @@ export default function SantaCallScreen({ route, navigation }) {
 
       const spokenName = (child.phoneticSpelling?.trim()) || child.name || 'friend';
       const greeting = `Ho ho ho! Hello ${spokenName}! This is Santa calling from the North Pole. What would you like for Christmas this year?`;
+      
+      addLog(`Greeting text: "${greeting}"`, 'GREETING');
+      addLog('Sending greeting request to server...', 'REQUEST');
 
       const response = await chatWithSantaAudio(
         child._id,
@@ -479,14 +476,18 @@ export default function SantaCallScreen({ route, navigation }) {
         { isGreeting: true, greetingText: greeting, childName: spokenName }
       );
 
+      addLog(`Server response received: ${response?.audioBase64 ? 'SUCCESS' : 'NO AUDIO'}`, 'RESPONSE');
+
       if (response?.audioBase64) {
+        addLog(`Audio size: ${response.audioBase64.length} characters`, 'RESPONSE');
         await playAudioFromBase64(response.audioBase64);
       } else {
+        addLog('No audio in response, starting listening', 'WARNING');
         setSantaSpeaking(false);
         setTimeout(() => startEnhancedListening(), 2000);
       }
     } catch (error) {
-      addLog(`❌ Greeting error: ${error.message}`);
+      addLog(`Greeting error: ${error.message}`, 'ERROR');
       setSantaSpeaking(false);
       setTimeout(() => startEnhancedListening(), 3000);
     }
@@ -494,27 +495,38 @@ export default function SantaCallScreen({ route, navigation }) {
 
   const startEnhancedListening = async () => {
     try {
+      addLog('=== START LISTENING ===', 'RECORDING');
+      
       if (isCleaningUp.current || callStatus === 'Call Ended' || callEnding) {
+        addLog(`NOT starting: cleanup=${isCleaningUp.current}, status=${callStatus}, ending=${callEnding}`, 'RECORDING');
         return;
       }
 
       if (isListeningActive.current) {
+        addLog('Already listening, skipping', 'RECORDING');
         return;
       }
 
       if (santaSpeaking) {
+        addLog('Santa still speaking, will retry in 1s', 'RECORDING');
         setTimeout(() => startEnhancedListening(), 1000);
         return;
       }
 
+      addLog('Stopping fillers before recording', 'AUDIO');
+      await stopFillers();
+      await new Promise(resolve => setTimeout(resolve, 300));
+
       if (recordingRef.current) {
         try {
           const status = await recordingRef.current.getStatusAsync();
+          addLog(`Previous recording status: recording=${status.isRecording}, canRecord=${status.canRecord}`, 'RECORDING');
           if (status.isRecording) {
+            addLog('Cleaning up previous recording', 'RECORDING');
             await recordingRef.current.stopAndUnloadAsync();
           }
         } catch (cleanupError) {
-          // Ignore
+          addLog(`Cleanup error: ${cleanupError.message}`, 'WARNING');
         }
         recordingRef.current = null;
       }
@@ -522,20 +534,55 @@ export default function SantaCallScreen({ route, navigation }) {
       stopVAD();
 
       const { status } = await Audio.getPermissionsAsync();
+      addLog(`Permission status: ${status}`, 'RECORDING');
       if (status !== 'granted') {
         throw new Error('Microphone permission not available');
       }
 
+      addLog('Setting audio mode for recording', 'AUDIO');
+      try {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: true,
+          playsInSilentModeIOS: true,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+          staysActiveInBackground: false,
+        });
+        addLog('Audio mode set successfully', 'AUDIO');
+      } catch (audioModeError) {
+        addLog(`Audio mode error: ${audioModeError.message}`, 'ERROR');
+        throw audioModeError;
+      }
+
       isListeningActive.current = true;
+      addLog('Creating new recording instance', 'RECORDING');
       
-      const { recording } = await Audio.Recording.createAsync(recordingOptions);
+      const recording = new Audio.Recording();
+      addLog('Recording instance created', 'RECORDING');
+      
+      addLog(`Preparing with options: sampleRate=${recordingOptions.android.sampleRate}, bitRate=${recordingOptions.android.bitRate}`, 'RECORDING');
+      await recording.prepareToRecordAsync(recordingOptions);
+      addLog('Recording prepared', 'RECORDING');
+      
       recordingRef.current = recording;
 
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      addLog('🎤 Starting recording NOW', 'RECORDING');
       await recording.startAsync();
+      
+      const recordingStatus = await recording.getStatusAsync();
+      addLog(`Recording status: isRecording=${recordingStatus.isRecording}, canRecord=${recordingStatus.canRecord}, durationMillis=${recordingStatus.durationMillis}`, 'RECORDING');
+      
+      if (!recordingStatus.isRecording) {
+        throw new Error('Recording failed to start - isRecording is false');
+      }
+      
+      addLog('✅ Recording started and verified', 'RECORDING');
 
       await initializeVAD(recording, {
         onVoiceStart: () => {
-          addLog('🎯 Voice activity started');
+          addLog('Voice activity detected', 'VAD');
         },
         onVoiceEnd: () => {
           isListeningActive.current = false;
@@ -546,26 +593,29 @@ export default function SantaCallScreen({ route, navigation }) {
           }, 1500);
         },
         onSilenceDetected: async () => {
+          addLog('Silence detected, processing speech', 'VAD');
           isListeningActive.current = false;
           await processUserSpeech();
         }
       });
 
     } catch (error) {
-      addLog(`❌ Enhanced listening error: ${error.message}`);
+      addLog(`❌ Listening error: ${error.message}`, 'ERROR');
+      addLog(`Error stack: ${error.stack}`, 'ERROR');
       isListeningActive.current = false;
       
       if (recordingRef.current) {
         try {
           await recordingRef.current.stopAndUnloadAsync();
         } catch (cleanupError) {
-          // Ignore
+          addLog(`Cleanup after error failed: ${cleanupError.message}`, 'ERROR');
         }
         recordingRef.current = null;
       }
       
       setTimeout(() => {
         if (!isCleaningUp.current && !callEnding) {
+          addLog('Retrying listening in 2s', 'RECORDING');
           startEnhancedListening();
         }
       }, 2000);
@@ -573,6 +623,7 @@ export default function SantaCallScreen({ route, navigation }) {
   };
 
   const stopListening = async () => {
+    addLog('Stopping listening', 'RECORDING');
     isListeningActive.current = false;
     stopVAD();
 
@@ -591,35 +642,63 @@ export default function SantaCallScreen({ route, navigation }) {
 
   const processUserSpeech = async () => {
     try {
+      addLog('=== PROCESSING SPEECH ===', 'PROCESSING');
+      
       if (!recordingRef.current) {
+        addLog('❌ No recording ref available', 'ERROR');
+        setTimeout(() => startEnhancedListening(), 2000);
         return;
       }
 
+      const preStopStatus = await recordingRef.current.getStatusAsync();
+      addLog(`Pre-stop status: isRecording=${preStopStatus.isRecording}, durationMillis=${preStopStatus.durationMillis}`, 'PROCESSING');
+
       const audioUri = recordingRef.current.getURI();
+      addLog(`Audio URI: ${audioUri}`, 'PROCESSING');
+      
       await stopListening();
 
       if (!audioUri) {
+        addLog('❌ No audio URI, restarting listening', 'ERROR');
         setTimeout(() => startEnhancedListening(), 2000);
         return;
       }
 
       const fileInfo = await FileSystem.getInfoAsync(audioUri);
-      if (!fileInfo.exists || fileInfo.size < 1000) {
+      addLog(`📁 File: size=${fileInfo.size} bytes, exists=${fileInfo.exists}, uri=${fileInfo.uri}`, 'PROCESSING');
+      
+      if (!fileInfo.exists) {
+        addLog(`❌ File doesn't exist at ${audioUri}`, 'ERROR');
         setTimeout(() => startEnhancedListening(), 2000);
         return;
       }
+      
+      if (fileInfo.size < 500) {
+        addLog(`⚠️ File very small (${fileInfo.size} bytes), but sending anyway`, 'WARNING');
+      }
 
+      addLog(`📤 Sending ${fileInfo.size} bytes (${(preStopStatus.durationMillis/1000).toFixed(1)}s) to server`, 'REQUEST');
       setIsProcessing(true);
       setSantaSpeaking(true);
       await startFillers();
 
       const response = await chatWithSantaAudio(child?._id, audioUri, token);
 
+      addLog('📥 Server response received', 'RESPONSE');
+      addLog(`Response: hasAudio=${!!response?.audioBase64}, hasText=${!!response?.text}, hasTranscription=${!!response?.transcription}`, 'RESPONSE');
+      
+      if (response?.transcription) {
+        addLog(`Transcription: "${response.transcription}"`, 'RESPONSE');
+      }
+      if (response?.text) {
+        addLog(`Santa text: "${response.text.substring(0, 100)}..."`, 'RESPONSE');
+      }
+
       await stopFillers();
       setIsProcessing(false);
 
       if (response?.audioBase64) {
-        // Save recording to device with transcription
+        // Save recording locally with transcription
         if (response.transcription && response.transcription.trim()) {
           try {
             await localAudioService.saveRecording(
@@ -628,27 +707,30 @@ export default function SantaCallScreen({ route, navigation }) {
               child.name,
               response.transcription
             );
-            addLog('✅ Recording saved to device');
+            addLog(`✅ Recording saved locally: "${response.transcription}"`, 'SAVE');
           } catch (saveError) {
-            addLog(`⚠️ Failed to save recording: ${saveError.message}`);
+            addLog(`⚠️ Failed to save locally: ${saveError.message}`, 'ERROR');
           }
         }
 
         // Check if child said goodbye
         if (response.text && detectGoodbye(response.text)) {
-          addLog('👋 Goodbye detected');
+          addLog(`👋 Goodbye detected in: "${response.text}"`, 'GOODBYE');
           await handleChildGoodbye();
           return;
         }
         
+        addLog(`🔊 Playing Santa response (${response.audioBase64.length} chars)`, 'RESPONSE');
         await playAudioFromBase64(response.audioBase64);
       } else {
+        addLog('⚠️ No audio in response, restarting listening', 'WARNING');
         setSantaSpeaking(false);
         setTimeout(() => startEnhancedListening(), 2000);
       }
 
     } catch (error) {
-      addLog(`❌ Speech processing error: ${error.message}`);
+      addLog(`❌ Speech processing error: ${error.message}`, 'ERROR');
+      addLog(`Error stack: ${error.stack}`, 'ERROR');
       await stopFillers();
       setIsProcessing(false);
       setSantaSpeaking(false);
@@ -659,11 +741,13 @@ export default function SantaCallScreen({ route, navigation }) {
   const playAudioFromBase64 = async (audioBase64, shouldEndCall = false) => {
     try {
       setSantaSpeaking(true);
+      addLog('Playing Santa audio...', 'AUDIO');
 
       const tempUri = `${FileSystem.documentDirectory}temp_santa_audio.mp3`;
       await FileSystem.writeAsStringAsync(tempUri, audioBase64, {
         encoding: FileSystem.EncodingType.Base64,
       });
+      addLog(`Audio written to: ${tempUri}`, 'AUDIO');
 
       const { sound } = await Audio.Sound.createAsync(
         { uri: tempUri },
@@ -671,9 +755,11 @@ export default function SantaCallScreen({ route, navigation }) {
       );
 
       soundRef.current = sound;
+      addLog('Audio playback started', 'AUDIO');
 
       sound.setOnPlaybackStatusUpdate(async (status) => {
         if (status.didJustFinish) {
+          addLog('Audio finished playing', 'AUDIO');
           setSantaSpeaking(false);
 
           try {
@@ -686,17 +772,23 @@ export default function SantaCallScreen({ route, navigation }) {
           soundRef.current = null;
 
           if (shouldEndCall) {
+            addLog('Ending call after audio', 'AUDIO');
             setTimeout(() => endCall(), 2000);
           } else {
+            addLog('Preparing to start listening after audio', 'AUDIO');
             setTimeout(() => {
-              if (callStatus !== 'Call Ended' && !isCleaningUp.current && !callEnding) {
+              if (!isCleaningUp.current && !callEnding) {
+                addLog('Starting listening after audio finished', 'RECORDING');
                 startEnhancedListening();
+              } else {
+                addLog(`NOT starting listening: cleanup=${isCleaningUp.current}, ending=${callEnding}`, 'RECORDING');
               }
             }, 1000);
           }
         }
 
         if (status.error) {
+          addLog(`Audio playback error: ${status.error}`, 'ERROR');
           setSantaSpeaking(false);
           if (shouldEndCall) {
             setTimeout(() => endCall(), 1000);
@@ -707,7 +799,7 @@ export default function SantaCallScreen({ route, navigation }) {
       });
 
     } catch (error) {
-      addLog(`❌ Audio playback error: ${error.message}`);
+      addLog(`Audio playback error: ${error.message}`, 'ERROR');
       setSantaSpeaking(false);
       if (shouldEndCall) {
         setTimeout(() => endCall(), 1000);
@@ -718,6 +810,7 @@ export default function SantaCallScreen({ route, navigation }) {
   };
 
   const cleanup = async () => {
+    addLog('=== CLEANUP STARTED ===', 'CLEANUP');
     isCleaningUp.current = true;
     isListeningActive.current = false;
 
@@ -746,13 +839,25 @@ export default function SantaCallScreen({ route, navigation }) {
     } catch (error) {
       // Ignore
     }
+    
+    addLog('Cleanup completed', 'CLEANUP');
   };
 
   const endCall = async () => {
-    addLog('📞 === ENDING CALL ===');
+    addLog('=== ENDING CALL ===', 'END');
     setCallStatus('Call Ended');
+    setCallEnded(true);
+    
+    // Complete the chat tutorial step
+    completeStep(TUTORIAL_STEPS.CHAT_WITH_SANTA);
+    
     await cleanup();
-    setTimeout(() => navigation.goBack(), 2000);
+    
+    // Show tooltip for a moment before navigating back
+    setTimeout(() => {
+      addLog('Navigating back', 'END');
+      navigation.goBack();
+    }, 3000);
   };
 
   const formatDuration = (sec) => {
@@ -779,6 +884,16 @@ export default function SantaCallScreen({ route, navigation }) {
   return (
     <View style={styles.container}>
       <View style={styles.callGradient} />
+
+      {/* Tooltip for call ended */}
+      {callEnded && (
+        <TooltipOverlay
+          step={TUTORIAL_STEPS.VIEW_WISHLIST}
+          title="Call Complete! 🎄"
+          message="Great job! Your call with Santa has been saved. You can view all recordings in the Audio Files menu from the drawer!"
+          position="center"
+        />
+      )}
 
       <View style={styles.callerContainer}>
         <View style={[

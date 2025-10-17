@@ -16,7 +16,7 @@ import * as childService from '../services/childService';
 import * as localAudioService from '../services/localAudioService';
 import Snowflakes from '../components/Snowflakes';
 
-export default function AudioFilesScreen({ navigation }) {
+function AudioFilesScreen({ navigation }) {
   const { token } = useContext(AuthContext);
   const [children, setChildren] = useState([]);
   const [selectedChild, setSelectedChild] = useState(null);
@@ -505,3 +505,4 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 });
+export default AudioFilesScreen;

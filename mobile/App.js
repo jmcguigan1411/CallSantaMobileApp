@@ -5,6 +5,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { AuthProvider, AuthContext } from './context/AuthContext';
+import { TooltipProvider } from '../context/TooltipContext'; // UNCOMMENTED
 import ProtectedScreen from './components/ProtectedScreen';
 import LogoutButton from './components/LogoutButton';
 import TermsModal from './components/TermsModal';
@@ -60,7 +61,7 @@ function AppDrawer() {
         headerTintColor: '#fff',
         headerTitleStyle: {
           fontWeight: 'bold',
-          fontSize: width < 360 ? 18 : 22, // Responsive font size
+          fontSize: width < 360 ? 18 : 22,
           letterSpacing: 1,
           textShadowColor: 'rgba(0, 0, 0, 0.3)',
           textShadowOffset: { width: 1, height: 1 },
@@ -86,7 +87,7 @@ function AppDrawer() {
         },
         drawerStyle: {
           backgroundColor: '#165B33',
-          width: width * 0.75, // 75% of screen width
+          width: width * 0.75,
         },
         drawerActiveBackgroundColor: 'rgba(255, 215, 0, 0.3)',
         drawerActiveTintColor: '#FFD700',
@@ -186,7 +187,9 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>
-        <AppContent />
+        <TooltipProvider>
+          <AppContent />
+        </TooltipProvider>
       </AuthProvider>
     </GestureHandlerRootView>
   );

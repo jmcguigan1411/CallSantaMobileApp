@@ -2,6 +2,7 @@
   "expo": {
     "name": "Call Santa",
     "slug": "mobile",
+    "scheme": "callsanta",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -14,12 +15,19 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.callsanta.callsanta"
+      "bundleIdentifier": "com.callsanta.callsanta",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.callsanta.callsanta",
       "versionCode": 1,
-      "permissions": ["RECORD_AUDIO"],
+      "permissions": [
+        "RECORD_AUDIO",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#b71c1c"
@@ -29,7 +37,6 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-web-browser",
       [
         "expo-av",
         {
@@ -39,7 +46,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "455c2d4e-06ce-42b4-b4a5-ad253c7231ce"
+        "projectId": "0e3db780-8e98-4250-a48f-da45138286a4"
       }
     }
   }
