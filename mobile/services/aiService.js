@@ -1,5 +1,5 @@
 // services/aiService.js - Complete file with token debugging
-const API_BASE = 'https://callsantamobile-devicestorage.onrender.com/api';
+const API_BASE = 'https://callsantamobileapp.onrender.com/api';
 
 // Function to handle Santa audio chat
 export const chatWithSantaAudio = async (childId, audioUri, token, options = {}) => {

@@ -1,12 +1,24 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
+const path = require('path');
 const aiController = require('../controllers/aiController');
 const { protect } = require('../middleware/authMiddleware');
 
-// Configure multer for audio file uploads
+// Configure multer with proper file extension handling
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'tmp/');
+  },
+  filename: function (req, file, cb) {
+    // Keep the original extension
+    const ext = path.extname(file.originalname) || '.m4a';
+    cb(null, Date.now() + '-' + Math.random().toString(36).substring(7) + ext);
+  }
+});
+
 const upload = multer({
-  dest: 'tmp/',
+  storage: storage,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith('audio/')) {
