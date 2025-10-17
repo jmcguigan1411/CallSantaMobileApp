@@ -305,3 +305,56 @@ exports.chatWithSantaAudio = async (req, res) => {
     });
   }
 };
+
+// --- Extract wishlist from local device transcriptions ---
+exports.extractWishlistLocal = async (req, res) => {
+  try {
+    const { childName, transcriptions, recordingsCount } = req.body;
+    
+    if (!transcriptions || transcriptions.trim().length === 0) {
+      return res.json({ wishlist: [], recordingsAnalyzed: 0 });
+    }
+    
+    console.log(`🎁 Extracting wishlist for ${childName} from ${recordingsCount || 'unknown'} recordings`);
+    console.log(`📝 Transcriptions length: ${transcriptions.length} characters`);
+    
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `You are analyzing conversations between a child and Santa Claus. Extract all gift wishes, toys, activities, or things the child mentioned wanting for Christmas. Return a JSON object with a "wishlist" array. Each item should be a string describing what the child wants. Only include actual wishes, not general conversation.`
+        },
+        {
+          role: "user",
+          content: `Child's name: ${childName}\n\nTranscriptions:\n${transcriptions}\n\nExtract the wishlist as a JSON object with a "wishlist" array.`
+        }
+      ],
+      max_tokens: 500,
+      temperature: 0.3,
+      response_format: { type: "json_object" }
+    });
+
+    const result = JSON.parse(completion.choices[0].message.content);
+    const wishlist = result.wishlist || result.items || [];
+
+    console.log(`✅ Extracted ${wishlist.length} wishlist items:`, wishlist);
+
+    res.json({ 
+      wishlist,
+      recordingsAnalyzed: recordingsCount,
+      childName
+    });
+
+  } catch (error) {
+    console.error('❌ Error extracting wishlist:', error);
+    res.status(500).json({ message: 'Failed to extract wishlist', error: error.message });
+  }
+};
+
+// Ensure all exports are available
+console.log('✅ AI Controller loaded with functions:', {
+  chatWithSanta: typeof exports.chatWithSanta,
+  chatWithSantaAudio: typeof exports.chatWithSantaAudio,
+  extractWishlistLocal: typeof exports.extractWishlistLocal
+});

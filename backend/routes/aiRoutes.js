@@ -20,16 +20,15 @@ const upload = multer({
 // Text chat with Santa
 router.post('/chat/:childId', protect, aiController.chatWithSanta);
 
-// Audio chat with Santa (for phone calls) - ADD MULTER HERE
+// Audio chat with Santa (for phone calls)
 router.post(
-  '/chat-audio/:childId',  // ← CHANGED TO MATCH YOUR APP
+  '/chat-audio/:childId',
   protect,
-  upload.single('audio'),   // ← ADD THIS MIDDLEWARE
+  upload.single('audio'),
   aiController.chatWithSantaAudio
 );
 
 // Extract wishlist from local device recordings
-router.post('/extract-wishlist-local', protect, aiController.extractWishlistLocal);
 router.post('/wishlist/extract', protect, aiController.extractWishlistLocal);
 
 module.exports = router;
